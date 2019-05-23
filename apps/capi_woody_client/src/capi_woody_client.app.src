@@ -9,7 +9,6 @@
         thrift,
         dmsl,
         genlib,
-        lager,
-        bender_proto
+        lager
     ]}
 ]}.
