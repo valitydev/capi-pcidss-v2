@@ -7,6 +7,9 @@
 -export([decode_last_digits/1]).
 -export([decode_masked_pan/2]).
 
+-export([convert_crypto_currency_to_swag/1]).
+-export([convert_crypto_currency_from_swag/1]).
+
 -export_type([decode_data/0]).
 
 -type decode_data() :: #{binary() => term()}.
@@ -16,7 +19,9 @@ decode_payment_tool_token({bank_card, BankCard}) ->
 decode_payment_tool_token({payment_terminal, PaymentTerminal}) ->
     decode_payment_terminal(PaymentTerminal);
 decode_payment_tool_token({digital_wallet, DigitalWallet}) ->
-    decode_digital_wallet(DigitalWallet).
+    decode_digital_wallet(DigitalWallet);
+decode_payment_tool_token({crypto_currency, CryptoCurrency}) ->
+    decode_crypto_wallet(CryptoCurrency).
 
 decode_bank_card(#domain_BankCard{
     'token'          = Token,
@@ -70,12 +75,23 @@ decode_digital_wallet(#domain_DigitalWallet{
         <<"id"      >> => ID
     }).
 
+decode_crypto_wallet(CryptoCurrency) ->
+    capi_utils:map_to_base64url(#{
+        <<"type"           >> => <<"crypto_wallet">>,
+        <<"crypto_currency">> => capi_handler_decoder:convert_crypto_currency_to_swag(CryptoCurrency)
+    }).
+
 decode_payment_tool_details({bank_card, V}) ->
     decode_bank_card_details(V, #{<<"detailsType">> => <<"PaymentToolDetailsBankCard">>});
 decode_payment_tool_details({payment_terminal, V}) ->
     decode_payment_terminal_details(V, #{<<"detailsType">> => <<"PaymentToolDetailsPaymentTerminal">>});
 decode_payment_tool_details({digital_wallet, V}) ->
-    decode_digital_wallet_details(V, #{<<"detailsType">> => <<"PaymentToolDetailsDigitalWallet">>}).
+    decode_digital_wallet_details(V, #{<<"detailsType">> => <<"PaymentToolDetailsDigitalWallet">>});
+decode_payment_tool_details({crypto_currency, CryptoCurrency}) ->
+    #{
+        <<"detailsType">> => <<"PaymentToolDetailsCryptoWallet">>,
+        <<"cryptoCurrency">> => capi_handler_decoder:convert_crypto_currency_to_swag(CryptoCurrency)
+    }.
 
 decode_bank_card_details(BankCard, V) ->
     LastDigits = capi_handler_decoder:decode_last_digits(BankCard#domain_BankCard.masked_pan),
@@ -148,3 +164,19 @@ decode_last_digits(MaskedPan) when byte_size(MaskedPan) > ?MASKED_PAN_MAX_LENGTH
     binary:part(MaskedPan, {byte_size(MaskedPan), -?MASKED_PAN_MAX_LENGTH});
 decode_last_digits(MaskedPan) ->
     MaskedPan.
+
+-spec convert_crypto_currency_from_swag(binary()) -> atom().
+
+convert_crypto_currency_from_swag(<<"bitcoinCash">>) ->
+    bitcoin_cash;
+convert_crypto_currency_from_swag(CryptoCurrency) when is_binary(CryptoCurrency) ->
+    binary_to_existing_atom(CryptoCurrency, utf8).
+
+-spec convert_crypto_currency_to_swag(atom()) -> binary().
+
+convert_crypto_currency_to_swag(bitcoin_cash) ->
+    <<"bitcoinCash">>;
+convert_crypto_currency_to_swag(CryptoCurrency) when is_atom(CryptoCurrency) ->
+    atom_to_binary(CryptoCurrency, utf8).
+
+

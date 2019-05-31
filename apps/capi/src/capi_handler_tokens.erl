@@ -37,7 +37,9 @@ process_request('CreatePaymentResource' = OperationID, Req, Context) ->
                 #{<<"paymentToolType">> := <<"DigitalWalletData"  >>} ->
                     process_digital_wallet_data(Data);
                 #{<<"paymentToolType">> := <<"TokenizedCardData"  >>} ->
-                    process_tokenized_card_data(Data, IdempotentParams, Context)
+                    process_tokenized_card_data(Data, IdempotentParams, Context);
+                #{<<"paymentToolType">> := <<"CryptoWalletData"   >>} ->
+                    process_crypto_wallet_data(Data)
             end,
         PaymentResource =
             #domain_DisposablePaymentResource{
@@ -251,6 +253,10 @@ process_tokenized_card_data(Data, IdempotentParams, Context) ->
         ),
         UnwrappedPaymentTool
     ).
+
+process_crypto_wallet_data(Data) ->
+    #{<<"cryptoCurrency">> := CryptoCurrency} = Data,
+    {{crypto_currency, capi_handler_decoder:convert_crypto_currency_from_swag(CryptoCurrency)}, <<>>}.
 
 get_token_provider_service_name(Data) ->
     case Data of
