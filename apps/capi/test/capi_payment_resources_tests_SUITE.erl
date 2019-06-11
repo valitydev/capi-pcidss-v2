@@ -138,7 +138,7 @@ init_per_group(payment_resources, Config) ->
     [{context, capi_ct_helper:get_context(Token)} | Config];
 
 init_per_group(ip_replacement_allowed, Config) ->
-    ExtraProperties = #{<<"ip_replacement_allowed">> => <<"true">>},
+    ExtraProperties = #{<<"ip_replacement_allowed">> => true},
     Token = capi_ct_helper:issue_token(?STRING, [{[payment_resources], write}], unlimited, ExtraProperties),
     [{context, capi_ct_helper:get_context(Token)} | Config].
 
