@@ -36,7 +36,7 @@
     Result :: false | {true, uac:context()}.
 
 authorize_api_key(OperationID, ApiKey) ->
-    scoper:scope(?SWAG_HANDLER_SCOPE, #{operation_id => OperationID, api_key => ApiKey}, fun() ->
+    scoper:scope(?SWAG_HANDLER_SCOPE, #{operation_id => OperationID}, fun() ->
         _ = lager:debug("Api key authorization started"),
         case uac:authorize_api_key(ApiKey, get_verification_options()) of
             {ok, Context} ->
@@ -73,11 +73,19 @@ get_verification_options() ->
 ) ->
     {ok | error,   response()}.
 
-handle_request(OperationID, Req, SwagContext = #{auth_context := AuthContext}) ->
-    _ = lager:info("Processing request ~p", [OperationID]),
+handle_request(OperationID, Req, SwagContext) ->
+    scoper:scope(
+        ?SWAG_HANDLER_SCOPE,
+        #{
+            operation_id => OperationID
+        },
+        fun() -> handle_request_(OperationID, Req, SwagContext) end
+    ).
+
+handle_request_(OperationID, Req, SwagContext = #{auth_context := AuthContext}) ->
     try
-        ok = scoper:add_scope(?SWAG_HANDLER_SCOPE, #{operation_id => OperationID}),
         WoodyContext = attach_deadline(Req, create_woody_context(Req, AuthContext)),
+        _ = lager:debug("Processing request"),
         OperationACL = capi_auth:get_operation_access(OperationID, Req),
         case uac:authorize_operation(OperationACL, AuthContext) of
             ok ->
@@ -94,8 +102,6 @@ handle_request(OperationID, Req, SwagContext = #{auth_context := AuthContext}) -
             {ok, logic_error(invalidDeadline, <<"Invalid data in X-Request-Deadline header">>)};
         throw:{handler_function_clause, _OperationID} ->
             {ok, {501, [], undefined}}
-    after
-        ok = scoper:remove_scope(?SWAG_HANDLER_SCOPE)
     end.
 
 -spec process_request(
