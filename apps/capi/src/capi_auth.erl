@@ -31,7 +31,9 @@ get_claim(ClaimName, {_Id, _Subject, Claims}, Default) ->
 
 %%
 
--spec get_operation_access(swag_server:operation_id(), swag_server:request_data()) ->
+-type request_data() :: #{atom() | binary() => term()}.
+
+-spec get_operation_access(swag_server:operation_id(), request_data()) ->
     [{uac_acl:scope(), uac_acl:permission()}].
 
 get_operation_access('CreatePaymentResource'     , _) ->

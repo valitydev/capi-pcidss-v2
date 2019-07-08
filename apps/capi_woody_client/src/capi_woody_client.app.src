@@ -8,7 +8,6 @@
         scoper,
         thrift,
         dmsl,
-        genlib,
-        lager
+        genlib
     ]}
 ]}.

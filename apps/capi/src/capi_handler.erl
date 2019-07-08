@@ -7,8 +7,8 @@
 -behaviour(swag_server_logic_handler).
 
 %% API callbacks
--export([authorize_api_key/2]).
--export([handle_request/3]).
+-export([authorize_api_key/3]).
+-export([handle_request/4]).
 
 %% Handler behaviour
 
@@ -32,18 +32,18 @@
 
 -define(SWAG_HANDLER_SCOPE, swag_handler).
 
--spec authorize_api_key(swag_server:operation_id(), swag_server:api_key()) ->
+-spec authorize_api_key(swag_server:operation_id(), swag_server:api_key(), handler_opts()) ->
     Result :: false | {true, uac:context()}.
 
-authorize_api_key(OperationID, ApiKey) ->
+authorize_api_key(OperationID, ApiKey, _HandlerOpts) ->
     scoper:scope(?SWAG_HANDLER_SCOPE, #{operation_id => OperationID}, fun() ->
-        _ = lager:debug("Api key authorization started"),
+        _ = logger:debug("Api key authorization started"),
         case uac:authorize_api_key(ApiKey, get_verification_options()) of
             {ok, Context} ->
-                _ = lager:debug("Api key authorization successful"),
+                _ = logger:debug("Api key authorization successful"),
                 {true, Context};
             {error, Error} ->
-                _ = lager:info("Api key authorization failed due to ~p", [Error]),
+                _ = logger:info("Api key authorization failed due to ~p", [Error]),
                 false
         end
     end).
@@ -52,7 +52,8 @@ authorize_api_key(OperationID, ApiKey) ->
 
 -type operation_id()        :: swag_server:operation_id().
 -type request_context()     :: swag_server:request_context().
--type response()            :: swag_server_logic_handler:response().
+-type response()            :: swag_server:response().
+-type handler_opts()        :: swag_server:handler_opts(_).
 -type processing_context()  :: #{
     swagger_context := swag_server:request_context(),
     woody_context   := woody_context:ctx()
@@ -69,11 +70,12 @@ get_verification_options() ->
 -spec handle_request(
     OperationID :: operation_id(),
     Req         :: request_data(),
-    SwagContext :: request_context()
+    SwagContext :: request_context(),
+    HandlerOpts :: handler_opts()
 ) ->
     {ok | error,   response()}.
 
-handle_request(OperationID, Req, SwagContext) ->
+handle_request(OperationID, Req, SwagContext, _HandlerOpts) ->
     scoper:scope(
         ?SWAG_HANDLER_SCOPE,
         #{
@@ -85,15 +87,15 @@ handle_request(OperationID, Req, SwagContext) ->
 handle_request_(OperationID, Req, SwagContext = #{auth_context := AuthContext}) ->
     try
         WoodyContext = attach_deadline(Req, create_woody_context(Req, AuthContext)),
-        _ = lager:debug("Processing request"),
+        _ = logger:debug("Processing request"),
         OperationACL = capi_auth:get_operation_access(OperationID, Req),
         case uac:authorize_operation(OperationACL, AuthContext) of
             ok ->
                 Context = create_processing_context(SwagContext, WoodyContext),
                 process_request(OperationID, Req, Context, get_handlers());
             {error, _} = Error ->
-                _ = lager:info("Operation ~p authorization failed due to ~p", [OperationID, Error]),
-                {ok, {401, [], undefined}}
+                _ = logger:info("Operation ~p authorization failed due to ~p", [OperationID, Error]),
+                {ok, {401, #{}, undefined}}
         end
     catch
         error:{woody_error, {Source, Class, Details}} ->
@@ -101,7 +103,7 @@ handle_request_(OperationID, Req, SwagContext = #{auth_context := AuthContext}) 
         throw:{bad_deadline, _Deadline} ->
             {ok, logic_error(invalidDeadline, <<"Invalid data in X-Request-Deadline header">>)};
         throw:{handler_function_clause, _OperationID} ->
-            {ok, {501, [], undefined}}
+            {ok, {501, #{}, undefined}}
     end.
 
 -spec process_request(
@@ -113,7 +115,7 @@ handle_request_(OperationID, Req, SwagContext = #{auth_context := AuthContext}) 
     {ok | error,   response()}.
 
 process_request(OperationID, _Req, _Context, []) ->
-    _ = lager:error("Operation ~p failed due to missing handler", [OperationID]),
+    _ = logger:error("Operation ~p failed due to missing handler", [OperationID]),
     erlang:throw({handler_function_clause, OperationID});
 process_request(OperationID, Req, Context, [Handler | Rest]) ->
     case Handler:process_request(OperationID, Req, Context) of
