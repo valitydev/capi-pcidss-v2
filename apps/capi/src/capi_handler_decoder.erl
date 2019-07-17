@@ -78,7 +78,7 @@ decode_digital_wallet(#domain_DigitalWallet{
 decode_crypto_wallet(CryptoCurrency) ->
     capi_utils:map_to_base64url(#{
         <<"type"           >> => <<"crypto_wallet">>,
-        <<"crypto_currency">> => capi_handler_decoder:convert_crypto_currency_to_swag(CryptoCurrency)
+        <<"crypto_currency">> => convert_crypto_currency_to_swag(CryptoCurrency)
     }).
 
 decode_payment_tool_details({bank_card, V}) ->
@@ -90,16 +90,16 @@ decode_payment_tool_details({digital_wallet, V}) ->
 decode_payment_tool_details({crypto_currency, CryptoCurrency}) ->
     #{
         <<"detailsType">> => <<"PaymentToolDetailsCryptoWallet">>,
-        <<"cryptoCurrency">> => capi_handler_decoder:convert_crypto_currency_to_swag(CryptoCurrency)
+        <<"cryptoCurrency">> => convert_crypto_currency_to_swag(CryptoCurrency)
     }.
 
 decode_bank_card_details(BankCard, V) ->
-    LastDigits = capi_handler_decoder:decode_last_digits(BankCard#domain_BankCard.masked_pan),
+    LastDigits = decode_last_digits(BankCard#domain_BankCard.masked_pan),
     Bin = BankCard#domain_BankCard.bin,
     capi_handler_utils:merge_and_compact(V, #{
-        <<"lastDigits">>     => LastDigits,
-        <<"bin">>            => Bin,
-        <<"cardNumberMask">> => capi_handler_decoder:decode_masked_pan(Bin, LastDigits),
+        <<"last4">>          => LastDigits,
+        <<"first6">>         => Bin,
+        <<"cardNumberMask">> => decode_masked_pan(Bin, LastDigits),
         <<"paymentSystem" >> => genlib:to_binary(BankCard#domain_BankCard.payment_system),
         <<"tokenProvider" >> => decode_token_provider(BankCard#domain_BankCard.token_provider)
     }).
@@ -124,7 +124,7 @@ mask_phone_number(PhoneNumber) ->
     genlib_string:redact(PhoneNumber, <<"^\\+\\d(\\d{1,10}?)\\d{2,4}$">>).
 
 -spec decode_disposable_payment_resource(capi_handler_encoder:encode_data()) ->
-    capi_handler_decoder:decode_data().
+    decode_data().
 
 decode_disposable_payment_resource(Resource) ->
     #domain_DisposablePaymentResource{payment_tool = PaymentTool, payment_session_id = SessionID} = Resource,
@@ -148,9 +148,11 @@ decode_client_info(ClientInfo) ->
 
 -define(PAN_LENGTH, 16).
 
--spec decode_masked_pan(binary(), binary()) ->
+-spec decode_masked_pan(binary() | undefined, binary()) ->
     binary().
 
+decode_masked_pan(undefined, LastDigits) ->
+    decode_masked_pan(<<>>, LastDigits);
 decode_masked_pan(Bin, LastDigits) ->
     Mask = binary:copy(<<"*">>, ?PAN_LENGTH - byte_size(Bin) - byte_size(LastDigits)),
     <<Bin/binary, Mask/binary, LastDigits/binary>>.

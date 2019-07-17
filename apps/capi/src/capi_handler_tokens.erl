@@ -21,7 +21,6 @@
 process_request('CreatePaymentResource' = OperationID, Req, Context) ->
     Params = maps:get('PaymentResourceParams', Req),
     ClientInfo = enrich_client_info(maps:get(<<"clientInfo">>, Params), Context),
-
     try
         Data = maps:get(<<"paymentTool">>, Params), % "V" ????
         PartyID = capi_handler_utils:get_party_id(Context),
@@ -57,6 +56,8 @@ process_request('CreatePaymentResource' = OperationID, Req, Context) ->
 process_request(_OperationID, _Req, _Context) ->
     {error, noimpl}.
 
+%%
+
 enrich_client_info(ClientInfo, Context) ->
     Claims = capi_handler_utils:get_auth_context(Context),
     IP = case capi_auth:get_claim(<<"ip_replacement_allowed">>, Claims, false) of
@@ -71,11 +72,6 @@ enrich_client_info(ClientInfo, Context) ->
     end,
     ClientInfo#{<<"ip">> => IP}.
 
-validate_ip(IP) ->
-    % placeholder so far.
-    % we could want to check whether client's ip is valid and corresponds IPv4 inside IPv6 standart
-    IP.
-
 prepare_client_ip(Context) ->
     #{ip_address := IP} = get_peer_info(Context),
     genlib:to_binary(inet:ntoa(IP)).
@@ -83,10 +79,40 @@ prepare_client_ip(Context) ->
 get_peer_info(#{swagger_context := #{peer := Peer}}) ->
     Peer.
 
+validate_ip(IP) ->
+    % placeholder so far.
+    % we could want to check whether client's ip is valid and corresponds IPv4 inside IPv6 standart
+    IP.
+
+%%
+
 process_card_data(Data, IdempotentParams, Context) ->
     SessionData = encode_session_data(Data),
     CardData = encode_card_data(Data),
-    put_card_data_to_cds(CardData, SessionData, IdempotentParams, Context).
+    Result = put_card_data_to_cds(CardData, SessionData, IdempotentParams, Context),
+    process_card_data_result(Result, CardData).
+
+process_card_data_result(
+    {{bank_card, BankCard}, SessionID},
+    #'CardData'{
+        pan  = CardNumber
+    }
+) ->
+    {
+        {bank_card, BankCard#domain_BankCard{
+            bin = get_first6(CardNumber),
+            masked_pan = get_last4(CardNumber)
+        }},
+        SessionID
+    }.
+
+encode_session_data(CardData) ->
+    #'SessionData'{
+        auth_data = {card_security_code, #'CardSecurityCode'{
+            % dirty hack for cds support empty cvv bank cards
+            value = maps:get(<<"cvv">>, CardData, <<"">>)
+        }}
+    }.
 
 encode_card_data(CardData) ->
     {Month, Year} = parse_exp_date(genlib_map:get(<<"expDate">>, CardData)),
@@ -110,33 +136,6 @@ parse_exp_date(ExpDate) when is_binary(ExpDate) ->
     end,
     {genlib:to_int(Month), Year}.
 
-encode_session_data(CardData) ->
-    #'SessionData'{
-        auth_data = {card_security_code, #'CardSecurityCode'{
-            % dirty hack for cds support empty cvv bank cards
-            value = maps:get(<<"cvv">>, CardData, <<"">>)
-        }}
-    }.
-
-put_card_to_cds(CardData, SessionData, Context) ->
-    BinData = lookup_bank_info(CardData#'CardData'.pan, Context),
-    Call = {cds_storage, 'PutCard', [CardData]},
-    case capi_handler_utils:service_call(Call, Context) of
-        {ok, #'PutCardResult'{bank_card = BankCard}} ->
-            {bank_card, expand_card_info(
-                BankCard,
-                BinData,
-                undef_cvv(SessionData)
-            )};
-        {exception, #'InvalidCardData'{}} ->
-            throw({ok, logic_error(invalidRequest, <<"Card data is invalid">>)})
-    end.
-
-put_session_to_cds(SessionID, SessionData, Context) ->
-    Call = {cds_storage, 'PutSession', [SessionID, SessionData]},
-    {ok, ok} = capi_handler_utils:service_call(Call, Context),
-    ok.
-
 put_card_data_to_cds(CardData, SessionData, {ExternalID, IdempotentKey}, Context) ->
     #{woody_context := WoodyCtx} = Context,
     BankCard = put_card_to_cds(CardData, SessionData, Context),
@@ -151,6 +150,16 @@ put_card_data_to_cds(CardData, SessionData, {ExternalID, IdempotentKey}, Context
             throw({ok, logic_error(externalIDConflict, ExternalID)})
     end.
 
+put_card_to_cds(CardData, SessionData, Context) ->
+    BinData = lookup_bank_info(CardData#'CardData'.pan, Context),
+    Call = {cds_storage, 'PutCard', [CardData]},
+    case capi_handler_utils:service_call(Call, Context) of
+        {ok, #'PutCardResult'{bank_card = BankCard}} ->
+            {bank_card, expand_card_info(BankCard, BinData, undef_cvv(SessionData))};
+        {exception, #'InvalidCardData'{}} ->
+            throw({ok, logic_error(invalidRequest, <<"Card data is invalid">>)})
+    end.
+
 lookup_bank_info(Pan, Context) ->
     RequestVersion = {'last', #binbase_Last{}},
     Call = {binbase, 'Lookup', [Pan, RequestVersion]},
@@ -160,21 +169,6 @@ lookup_bank_info(Pan, Context) ->
         {exception, #'binbase_BinNotFound'{}} ->
             throw({ok, logic_error(invalidRequest, <<"Card data is invalid">>)})
     end.
-
-undef_cvv(#'SessionData'{
-        auth_data = {card_security_code, #'CardSecurityCode'{
-            value = <<"">>
-        }}
-    }) ->
-    true;
-undef_cvv(#'SessionData'{
-        auth_data = {card_security_code, #'CardSecurityCode'{
-            value = _Value
-        }}
-    }) ->
-    false;
-undef_cvv(#'SessionData'{}) ->
-    undefined.
 
 expand_card_info(BankCard, {BinData, Version}, HaveCVV) ->
     try
@@ -214,12 +208,46 @@ encode_binbase_payment_system(<<"NSPK MIR">>)                  -> nspkmir;
 encode_binbase_payment_system(_) ->
     throw({encode_binbase_payment_system, invalid_payment_system}).
 
+%% Seems to fit within PCIDSS requirments for all PAN lengths
+get_first6(CardNumber) ->
+    binary:part(CardNumber, {0, 6}).
+get_last4(CardNumber) ->
+    binary:part(CardNumber, {byte_size(CardNumber), -4}).
+
+undef_cvv(#'SessionData'{
+        auth_data = {card_security_code, #'CardSecurityCode'{
+            value = <<"">>
+        }}
+    }) ->
+    true;
+undef_cvv(#'SessionData'{
+        auth_data = {card_security_code, #'CardSecurityCode'{
+            value = _Value
+        }}
+    }) ->
+    false;
+undef_cvv(#'SessionData'{}) ->
+    undefined.
+
+gen_random_id() ->
+    Random = crypto:strong_rand_bytes(16),
+    genlib_format:format_int_base(binary:decode_unsigned(Random), 62).
+
+put_session_to_cds(SessionID, SessionData, Context) ->
+    Call = {cds_storage, 'PutSession', [SessionID, SessionData]},
+    {ok, ok} = capi_handler_utils:service_call(Call, Context),
+    ok.
+
+%%
+
 process_payment_terminal_data(Data) ->
     PaymentTerminal =
         #domain_PaymentTerminal{
             terminal_type = binary_to_existing_atom(genlib_map:get(<<"provider">>, Data), utf8)
         },
     {{payment_terminal, PaymentTerminal}, <<>>}.
+
+%%
 
 process_digital_wallet_data(Data) ->
     DigitalWallet = case Data of
@@ -231,6 +259,8 @@ process_digital_wallet_data(Data) ->
     end,
     {{digital_wallet, DigitalWallet}, <<>>}.
 
+%%
+
 process_tokenized_card_data(Data, IdempotentParams, Context) ->
     Call = {get_token_provider_service_name(Data), 'Unwrap', [encode_wrapped_payment_tool(Data)]},
     UnwrappedPaymentTool = case capi_handler_utils:service_call(Call, Context) of
@@ -239,19 +269,10 @@ process_tokenized_card_data(Data, IdempotentParams, Context) ->
         {exception, #'InvalidRequest'{}} ->
             throw({ok, logic_error(invalidRequest, <<"Tokenized card data is invalid">>)})
     end,
-    process_put_card_data_result(
-        put_card_data_to_cds(
-            encode_tokenized_card_data(UnwrappedPaymentTool),
-            encode_tokenized_session_data(UnwrappedPaymentTool),
-            IdempotentParams,
-            Context
-        ),
-        UnwrappedPaymentTool
-    ).
-
-process_crypto_wallet_data(Data) ->
-    #{<<"cryptoCurrency">> := CryptoCurrency} = Data,
-    {{crypto_currency, capi_handler_decoder:convert_crypto_currency_from_swag(CryptoCurrency)}, <<>>}.
+    CardData = encode_tokenized_card_data(UnwrappedPaymentTool),
+    SessionData = encode_tokenized_session_data(UnwrappedPaymentTool),
+    Result = put_card_data_to_cds(CardData, SessionData, IdempotentParams, Context),
+    process_tokenized_card_data_result(Result, UnwrappedPaymentTool).
 
 get_token_provider_service_name(Data) ->
     case Data of
@@ -262,42 +283,6 @@ get_token_provider_service_name(Data) ->
         #{<<"provider">> := <<"SamsungPay">>} ->
             payment_tool_provider_samsung_pay
     end.
-
-process_put_card_data_result(
-    {{bank_card, BankCard}, SessionID},
-    #paytoolprv_UnwrappedPaymentTool{
-        card_info = #paytoolprv_CardInfo{
-            payment_system = PaymentSystem,
-            last_4_digits  = Last4
-        },
-        payment_data = PaymentData,
-        details = PaymentDetails
-    }
-) ->
-    {
-        {bank_card, BankCard#domain_BankCard{
-            payment_system = PaymentSystem,
-            masked_pan     = genlib:define(Last4, BankCard#domain_BankCard.masked_pan),
-            token_provider = get_payment_token_provider(PaymentDetails, PaymentData),
-            %% Не учитываем наличие cvv для токенизированных карт, даже если проводим их как обычные.
-            is_cvv_empty   = undefined
-        }},
-        SessionID
-    }.
-
-get_payment_token_provider(_PaymentDetails, {card, _}) ->
-    % TODO
-    % We deliberately hide the fact that we've got that payment tool from the likes of Google Chrome browser
-    % in order to make our internal services think of it as if it was good ol' plain bank card. Without a
-    % CVV though. A better solution would be to distinguish between a _token provider_ and an _origin_.
-    undefined;
-
-get_payment_token_provider({apple, _}, _PaymentData) ->
-    applepay;
-get_payment_token_provider({google, _}, _PaymentData) ->
-    googlepay;
-get_payment_token_provider({samsung, _}, _PaymentData) ->
-    samsungpay.
 
 encode_wrapped_payment_tool(Data) ->
     #paytoolprv_WrappedPaymentTool{
@@ -319,6 +304,55 @@ encode_payment_request(#{<<"provider" >> := <<"SamsungPay">>} = Data) ->
         service_id = genlib_map:get(<<"serviceID">>, Data),
         reference_id = genlib_map:get(<<"referenceID">>, Data)
     }}.
+
+process_tokenized_card_data_result(
+    {{bank_card, BankCard}, SessionID},
+    #paytoolprv_UnwrappedPaymentTool{
+        card_info = #paytoolprv_CardInfo{
+            payment_system = PaymentSystem,
+            last_4_digits  = Last4
+        },
+        payment_data = PaymentData,
+        details = PaymentDetails
+    }
+) ->
+    {
+        {bank_card, BankCard#domain_BankCard{
+            bin            = get_tokenized_bin(PaymentData),
+            payment_system = PaymentSystem,
+            masked_pan     = get_tokenized_pan(Last4, PaymentData),
+            token_provider = get_payment_token_provider(PaymentDetails, PaymentData),
+            %% Не учитываем наличие cvv для токенизированных карт, даже если проводим их как обычные.
+            is_cvv_empty   = undefined
+        }},
+        SessionID
+    }.
+
+get_tokenized_bin({card, #paytoolprv_Card{pan = PAN}}) ->
+    get_first6(PAN);
+get_tokenized_bin(_PaymentData) ->
+    undefined.
+
+% Prefer to get last4 from the PAN itself rather than using the one from the adapter
+% On the other hand, getting a DPAN and no last4 from the adapter is unsupported
+get_tokenized_pan(_Last4, {card, #paytoolprv_Card{pan = PAN}}) ->
+    get_last4(PAN);
+get_tokenized_pan(Last4, _PaymentData) when Last4 =/= undefined ->
+    Last4.
+
+get_payment_token_provider(_PaymentDetails, {card, _}) ->
+    % TODO
+    % We deliberately hide the fact that we've got that payment tool from the likes of Google Chrome browser
+    % in order to make our internal services think of it as if it was good ol' plain bank card. Without a
+    % CVV though. A better solution would be to distinguish between a _token provider_ and an _origin_.
+    undefined;
+
+get_payment_token_provider({apple, _}, _PaymentData) ->
+    applepay;
+get_payment_token_provider({google, _}, _PaymentData) ->
+    googlepay;
+get_payment_token_provider({samsung, _}, _PaymentData) ->
+    samsungpay.
 
 encode_tokenized_card_data(#paytoolprv_UnwrappedPaymentTool{
     payment_data = {tokenized_card, #paytoolprv_TokenizedCard{
@@ -385,6 +419,8 @@ encode_tokenized_session_data(#paytoolprv_UnwrappedPaymentTool{
         }}
     }.
 
-gen_random_id() ->
-    Random = crypto:strong_rand_bytes(16),
-    genlib_format:format_int_base(binary:decode_unsigned(Random), 62).
+%%
+
+process_crypto_wallet_data(Data) ->
+    #{<<"cryptoCurrency">> := CryptoCurrency} = Data,
+    {{crypto_currency, capi_handler_decoder:convert_crypto_currency_from_swag(CryptoCurrency)}, <<>>}.
