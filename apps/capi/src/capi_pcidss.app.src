@@ -11,6 +11,7 @@
         dmsl,
         bender_proto,
         binbase_proto,
+        tds_proto,
         swag_server,
         cowboy_cors,
         cowboy_access_log,

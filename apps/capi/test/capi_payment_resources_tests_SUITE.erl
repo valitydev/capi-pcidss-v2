@@ -1,6 +1,7 @@
 -module(capi_payment_resources_tests_SUITE).
 
 -include_lib("common_test/include/ct.hrl").
+-include_lib("stdlib/include/assert.hrl").
 
 -include_lib("dmsl/include/dmsl_domain_config_thrift.hrl").
 -include_lib("dmsl/include/dmsl_payment_processing_thrift.hrl").
@@ -30,6 +31,8 @@
     create_nspkmir_payment_resource_ok_test/1,
     create_euroset_payment_resource_ok_test/1,
     create_qw_payment_resource_ok_test/1,
+    create_qw_payment_resource_with_access_token_generates_different_payment_token/1,
+    create_qw_payment_resource_with_access_token_depends_on_external_id/1,
     create_crypto_payment_resource_ok_test/1,
     create_applepay_tokenized_payment_resource_ok_test/1,
     create_googlepay_tokenized_payment_resource_ok_test/1,
@@ -48,6 +51,8 @@
 -define(CAPI_PORT                   , 8080).
 -define(CAPI_HOST_NAME              , "localhost").
 -define(CAPI_URL                    , ?CAPI_HOST_NAME ++ ":" ++ integer_to_list(?CAPI_PORT)).
+
+-define(IDEMPOTENT_KEY, <<"capi/CreatePaymentResource/TEST/ext_id">>).
 
 -define(TEST_PAYMENT_TOOL_ARGS, #{
     <<"paymentTool">> => #{
@@ -94,6 +99,8 @@ groups() ->
                 create_nspkmir_payment_resource_ok_test,
                 create_euroset_payment_resource_ok_test,
                 create_qw_payment_resource_ok_test,
+                create_qw_payment_resource_with_access_token_generates_different_payment_token,
+                create_qw_payment_resource_with_access_token_depends_on_external_id,
                 create_crypto_payment_resource_ok_test,
                 create_applepay_tokenized_payment_resource_ok_test,
                 create_googlepay_tokenized_payment_resource_ok_test,
@@ -421,6 +428,69 @@ create_qw_payment_resource_ok_test(Config) ->
         },
         <<"clientInfo">> => ClientInfo
     }).
+
+-spec create_qw_payment_resource_with_access_token_generates_different_payment_token(_) ->
+    _.
+create_qw_payment_resource_with_access_token_generates_different_payment_token(Config) ->
+    BenderResult = capi_ct_helper_bender:get_result(<<"benderkey">>),
+    capi_ct_helper:mock_services([
+        {bender,      fun ('GenerateID', _) -> {ok, BenderResult} end},
+        {tds_storage, fun ('PutToken', _)   -> {ok, ok} end}
+    ], Config),
+    ClientInfo = #{<<"fingerprint">> => <<"test fingerprint">>},
+    PaymentParams0 = #{
+        <<"paymentTool">> => #{
+            <<"paymentToolType">> => <<"DigitalWalletData">>,
+            <<"digitalWalletType">> => <<"DigitalWalletQIWI">>,
+            <<"phoneNumber">> => <<"+79876543210">>
+        },
+        <<"clientInfo">> => ClientInfo
+    },
+    PaymentParams1 = #{
+        <<"paymentTool">> => #{
+            <<"paymentToolType">> => <<"DigitalWalletData">>,
+            <<"digitalWalletType">> => <<"DigitalWalletQIWI">>,
+            <<"phoneNumber">> => <<"+79876543210">>,
+            <<"accessToken">> => <<"some_token">>
+        },
+        <<"clientInfo">> => ClientInfo
+    },
+    Result0 = capi_client_tokens:create_payment_resource(?config(context, Config), PaymentParams0),
+    Result1 = capi_client_tokens:create_payment_resource(?config(context, Config), PaymentParams1),
+    {ok, #{<<"paymentToolToken">> := Token0}} = Result0,
+    {ok, #{<<"paymentToolToken">> := Token1}} = Result1,
+    ?assertNotEqual(Token0, Token1).
+
+-spec create_qw_payment_resource_with_access_token_depends_on_external_id(_) ->
+    _.
+create_qw_payment_resource_with_access_token_depends_on_external_id(Config) ->
+    BenderResultExtID   = capi_ct_helper_bender:get_result(<<"benderkey0">>),
+    BenderResultNoExtId = capi_ct_helper_bender:get_result(<<"benderkey1">>),
+    capi_ct_helper:mock_services([
+        {bender,      fun ('GenerateID', [?IDEMPOTENT_KEY | _]) -> {ok, BenderResultExtID};
+                          ('GenerateID', _Args)                 -> {ok, BenderResultNoExtId}
+                      end},
+        {tds_storage, fun ('PutToken', _) -> {ok, ok} end}
+    ], Config),
+    ClientInfo = #{<<"fingerprint">> => <<"test fingerprint">>},
+    PaymentParamsNoExtId = #{
+        <<"paymentTool">> => #{
+            <<"paymentToolType">> => <<"DigitalWalletData">>,
+            <<"digitalWalletType">> => <<"DigitalWalletQIWI">>,
+            <<"phoneNumber">> => <<"+79876543210">>,
+            <<"accessToken">> => <<"some_token">>
+        },
+        <<"clientInfo">> => ClientInfo
+    },
+    PaymentParamsExtId = PaymentParamsNoExtId#{ <<"externalID">> => <<"ext_id">> },
+    ResultExtId0  = capi_client_tokens:create_payment_resource(?config(context, Config), PaymentParamsExtId),
+    ResultExtId1  = capi_client_tokens:create_payment_resource(?config(context, Config), PaymentParamsExtId),
+    ResultNoExtId = capi_client_tokens:create_payment_resource(?config(context, Config), PaymentParamsNoExtId),
+    {ok, #{<<"paymentToolToken">> := TokenExtId0}}  = ResultExtId0,
+    {ok, #{<<"paymentToolToken">> := TokenExtId1}}  = ResultExtId1,
+    {ok, #{<<"paymentToolToken">> := TokenNoExtId}} = ResultNoExtId,
+    ?assertEqual(TokenExtId0, TokenExtId1),
+    ?assertNotEqual(TokenExtId0, TokenNoExtId).
 
 -spec create_crypto_payment_resource_ok_test(_) ->
     _.

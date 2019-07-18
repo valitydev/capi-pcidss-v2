@@ -2,6 +2,7 @@
 
 -include_lib("dmsl/include/dmsl_domain_thrift.hrl").
 -include_lib("dmsl/include/dmsl_cds_thrift.hrl").
+-include_lib("tds_proto/include/tds_proto_storage_thrift.hrl").
 -include_lib("binbase_proto/include/binbase_binbase_thrift.hrl").
 -include_lib("dmsl/include/dmsl_payment_tool_provider_thrift.hrl").
 
@@ -34,7 +35,7 @@ process_request('CreatePaymentResource' = OperationID, Req, Context) ->
                 #{<<"paymentToolType">> := <<"PaymentTerminalData">>} ->
                     process_payment_terminal_data(Data);
                 #{<<"paymentToolType">> := <<"DigitalWalletData"  >>} ->
-                    process_digital_wallet_data(Data);
+                    process_digital_wallet_data(Data, IdempotentParams, Context);
                 #{<<"paymentToolType">> := <<"TokenizedCardData"  >>} ->
                     process_tokenized_card_data(Data, IdempotentParams, Context);
                 #{<<"paymentToolType">> := <<"CryptoWalletData"   >>} ->
@@ -247,19 +248,30 @@ process_payment_terminal_data(Data) ->
         },
     {{payment_terminal, PaymentTerminal}, <<>>}.
 
-%%
-
-process_digital_wallet_data(Data) ->
+process_digital_wallet_data(Data, IdempotentParams, Context) ->
+    TokenID = maybe_store_token_in_tds(Data, IdempotentParams, Context),
     DigitalWallet = case Data of
         #{<<"digitalWalletType">> := <<"DigitalWalletQIWI">>} ->
             #domain_DigitalWallet{
                 provider = qiwi,
-                id       = maps:get(<<"phoneNumber">>, Data)
+                id       = maps:get(<<"phoneNumber">>, Data),
+                token    = TokenID
             }
     end,
     {{digital_wallet, DigitalWallet}, <<>>}.
 
-%%
+maybe_store_token_in_tds(#{<<"accessToken">> := TokenContent}, IdempotentParams, Context) ->
+    #{woody_context := WoodyCtx} = Context,
+    {_ExternalID, IdempotentKey} = IdempotentParams,
+    Token         = #tds_Token{content = TokenContent},
+    RandomID      = gen_random_id(),
+    Hash          = undefined,
+    {ok, TokenID} = capi_bender:gen_by_constant(IdempotentKey, RandomID, Hash, WoodyCtx),
+    Call          = {tds_storage, 'PutToken', [TokenID, Token]},
+    {ok, ok}      = capi_handler_utils:service_call(Call, Context),
+    TokenID;
+maybe_store_token_in_tds(_, _IdempotentParams, _Context) ->
+    undefined.
 
 process_tokenized_card_data(Data, IdempotentParams, Context) ->
     Call = {get_token_provider_service_name(Data), 'Unwrap', [encode_wrapped_payment_tool(Data)]},

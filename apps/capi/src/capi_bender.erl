@@ -4,6 +4,7 @@
 -include_lib("bender_proto/include/msgpack_thrift.hrl").
 
 -type woody_context() :: woody_context:ctx().
+-type hash()          :: integer() | undefined.
 
 -export([gen_by_snowflake/3]).
 -export([gen_by_sequence/4]).
@@ -12,7 +13,7 @@
 
 -define(SCHEMA_VER1, 1).
 
--spec gen_by_snowflake(binary(), integer(), woody_context()) ->
+-spec gen_by_snowflake(binary(), hash(), woody_context()) ->
     {ok, binary()} |
     {error, {external_id_conflict, binary()}}.
 
@@ -20,7 +21,7 @@ gen_by_snowflake(IdempotentKey, Hash, WoodyContext) ->
     Snowflake = {snowflake, #bender_SnowflakeSchema{}},
     generate_id(IdempotentKey, Snowflake, Hash, WoodyContext).
 
--spec gen_by_sequence(binary(), binary(), integer(), woody_context()) ->
+-spec gen_by_sequence(binary(), binary(), hash(), woody_context()) ->
     {ok, binary()} |
     {error, {external_id_conflict, binary()}}.
 
@@ -32,7 +33,7 @@ gen_by_sequence(IdempotentKey, SequenceID, Hash, WoodyContext) ->
     generate_id(IdempotentKey, Sequence, Hash, WoodyContext).
 
 
--spec gen_by_constant(binary(), binary(), integer(), woody_context()) ->
+-spec gen_by_constant(binary(), binary(), hash(), woody_context()) ->
     {ok,    binary()} |
     {error, {external_id_conflict, binary()}}.
 

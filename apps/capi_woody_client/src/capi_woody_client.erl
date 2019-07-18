@@ -70,6 +70,8 @@ get_service_url(ServiceName) ->
 
 get_service_modname(cds_storage) ->
     {dmsl_cds_thrift, 'Storage'};
+get_service_modname(tds_storage) ->
+    {tds_proto_storage_thrift, 'TokenStorage'};
 get_service_modname(payment_tool_provider_apple_pay) ->
     {dmsl_payment_tool_provider_thrift, 'PaymentToolProvider'};
 get_service_modname(payment_tool_provider_google_pay) ->
