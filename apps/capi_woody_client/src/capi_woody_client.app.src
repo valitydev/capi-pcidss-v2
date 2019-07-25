@@ -4,10 +4,10 @@
     {applications, [
         kernel,
         stdlib,
-        woody,
-        scoper,
+        genlib,
         thrift,
         dmsl,
-        genlib
+        woody,
+        scoper
     ]}
 ]}.

@@ -7,22 +7,23 @@
         kernel,
         stdlib,
         genlib,
-        capi_woody_client,
-        dmsl,
         bender_proto,
         binbase_proto,
         tds_proto,
-        swag_server,
-        cowboy_cors,
-        cowboy_access_log,
+        dmsl,
+        snowflake,
         rfc3339,
         base64url,
-        snowflake,
-        woody_user_identity,
+        capi_woody_client,
+        how_are_you,  % must be after ranch and before any woody usage
+        scoper,
         payproc_errors,
+        swag_server,
+        woody_user_identity,
+        cowboy_cors,
+        cowboy_access_log,
         erl_health,
-        uac,
-        scoper
+        uac
     ]},
     {env, []}
 ]}.
