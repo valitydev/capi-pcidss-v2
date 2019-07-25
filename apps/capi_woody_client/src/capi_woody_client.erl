@@ -1,37 +1,36 @@
 -module(capi_woody_client).
 
 -export([call_service/4]).
--export([call_service/5]).
 
 -export([get_service_modname/1]).
 
 %%
 
 -type service_name() :: atom().
+-type client_opts() :: #{
+    url            := woody:url(),
+    %% See hackney:request/5 for available transport options.
+    transport_opts => woody_client_thrift_http_transport:transport_options()
+}.
 
 -spec call_service(service_name(), woody:func(), [term()], woody_context:ctx()) ->
     woody:result().
 
-call_service(ServiceName, Function, Args, Context) ->
-    call_service(ServiceName, Function, Args, Context, scoper_woody_event_handler).
-
--spec call_service(service_name(), woody:func(), [term()], woody_context:ctx(), woody:ev_handler()) ->
-    woody:result().
-
-call_service(ServiceName, Function, Args, Context0, EventHandler) ->
+call_service(ServiceName, Function, Args, Context0) ->
     Deadline = get_service_deadline(ServiceName),
     Context1 = set_deadline(Deadline, Context0),
     Retry = get_service_retry(ServiceName, Function),
+    EventHandler = scoper_woody_event_handler,
     call_service(ServiceName, Function, Args, Context1, EventHandler, Retry).
 
 call_service(ServiceName, Function, Args, Context, EventHandler, Retry) ->
-    Url = get_service_url(ServiceName),
+    Options = get_service_options(ServiceName),
     Service = get_service_modname(ServiceName),
     Request = {Service, Function, Args},
     try
         woody_client:call(
             Request,
-            #{url => Url, event_handler => EventHandler},
+            Options#{event_handler => EventHandler},
             Context
         )
     catch
@@ -63,8 +62,16 @@ apply_retry_step({wait, Timeout, Retry}, Deadline0, Error) ->
             Retry
     end.
 
-get_service_url(ServiceName) ->
-    maps:get(ServiceName, genlib_app:env(?MODULE, service_urls)).
+-spec get_service_options(service_name()) ->
+    client_opts().
+
+get_service_options(ServiceName) ->
+    construct_opts(maps:get(ServiceName, genlib_app:env(?MODULE, services))).
+
+construct_opts(Opts = #{url := Url}) ->
+    Opts#{url := genlib:to_binary(Url)};
+construct_opts(Url) ->
+    #{url => genlib:to_binary(Url)}.
 
 -spec get_service_modname(service_name()) -> woody:service().
 
