@@ -1,10 +1,11 @@
 -module(capi_handler_tokens).
 
--include_lib("dmsl/include/dmsl_domain_thrift.hrl").
--include_lib("dmsl/include/dmsl_cds_thrift.hrl").
+-include_lib("damsel/include/dmsl_domain_thrift.hrl").
+-include_lib("damsel/include/dmsl_cds_thrift.hrl").
 -include_lib("tds_proto/include/tds_proto_storage_thrift.hrl").
 -include_lib("binbase_proto/include/binbase_binbase_thrift.hrl").
--include_lib("dmsl/include/dmsl_payment_tool_provider_thrift.hrl").
+-include_lib("damsel/include/dmsl_payment_tool_provider_thrift.hrl").
+-include_lib("moneypenny/include/moneypenny_mnp_thrift.hrl").
 
 -behaviour(capi_handler).
 -export([process_request/3]).
@@ -39,7 +40,9 @@ process_request('CreatePaymentResource' = OperationID, Req, Context) ->
                 #{<<"paymentToolType">> := <<"TokenizedCardData"  >>} ->
                     process_tokenized_card_data(Data, IdempotentParams, Context);
                 #{<<"paymentToolType">> := <<"CryptoWalletData"   >>} ->
-                    process_crypto_wallet_data(Data)
+                    process_crypto_wallet_data(Data);
+                #{<<"paymentToolType">> := <<"MobileCommerceData" >>} ->
+                    process_mobile_commerce_data(Data, Context)
             end,
         PaymentResource =
             #domain_DisposablePaymentResource{
@@ -436,3 +439,36 @@ encode_tokenized_session_data(#paytoolprv_UnwrappedPaymentTool{
 process_crypto_wallet_data(Data) ->
     #{<<"cryptoCurrency">> := CryptoCurrency} = Data,
     {{crypto_currency, capi_handler_decoder:convert_crypto_currency_from_swag(CryptoCurrency)}, <<>>}.
+
+%%
+
+process_mobile_commerce_data(Data, Context) ->
+    MobilePhone = maps:get(<<"mobilePhone">>, Data),
+    {ok, Operator} = get_mobile_operator(MobilePhone, Context),
+    MobileCommerce = encode_mobile_commerce(MobilePhone, Operator),
+    {{mobile_commerce, MobileCommerce}, <<>>}.
+
+get_mobile_operator(MobilePhone, Context) ->
+    PhoneNumber = encode_phone_number(MobilePhone),
+    Call = {moneypenny, 'Lookup', [PhoneNumber]},
+    case capi_handler_utils:service_call(Call, Context) of
+        {ok, #mnp_ResponseData{operator = Operator}} ->
+            {ok, Operator};
+        {exception, #mnp_BadPhoneFormat{}} ->
+            throw({ok, logic_error(invalidRequest, <<"Bad phone format.">>)});
+        {exception, #mnp_OperatorNotFound{}} ->
+            throw({ok, logic_error(invalidRequest, <<"Operator not found.">>)})
+    end.
+
+encode_phone_number(#{<<"cc">> := Cc, <<"ctn">> := Ctn}) ->
+    #mnp_PhoneNumber{
+        cc = Cc,
+        ctn = Ctn
+    }.
+
+encode_mobile_commerce(MobilePhone, Operator) ->
+    #{<<"cc">> := Cc, <<"ctn">> := Ctn} = MobilePhone,
+    #domain_MobileCommerce{
+        operator = Operator,
+        phone = #domain_MobilePhone{cc = Cc, ctn = Ctn}
+    }.

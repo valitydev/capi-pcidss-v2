@@ -1,6 +1,6 @@
 -module(capi_handler_encoder).
 
--include_lib("dmsl/include/dmsl_domain_thrift.hrl").
+-include_lib("damsel/include/dmsl_domain_thrift.hrl").
 
 -export([encode_client_info/1]).
 -export([encode_residence/1]).

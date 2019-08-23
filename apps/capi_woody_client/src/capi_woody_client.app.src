@@ -6,7 +6,7 @@
         stdlib,
         genlib,
         thrift,
-        dmsl,
+        damsel,
         woody,
         scoper
     ]}

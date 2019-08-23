@@ -1,6 +1,6 @@
 -module(capi_handler_decoder).
 
--include_lib("dmsl/include/dmsl_domain_thrift.hrl").
+-include_lib("damsel/include/dmsl_domain_thrift.hrl").
 
 -export([decode_disposable_payment_resource/1]).
 
@@ -21,7 +21,9 @@ decode_payment_tool_token({payment_terminal, PaymentTerminal}) ->
 decode_payment_tool_token({digital_wallet, DigitalWallet}) ->
     decode_digital_wallet(DigitalWallet);
 decode_payment_tool_token({crypto_currency, CryptoCurrency}) ->
-    decode_crypto_wallet(CryptoCurrency).
+    decode_crypto_wallet(CryptoCurrency);
+decode_payment_tool_token({mobile_commerce, MobileCommerce}) ->
+    decode_mobile_commerce(MobileCommerce).
 
 decode_bank_card(#domain_BankCard{
     'token'          = Token,
@@ -93,6 +95,17 @@ decode_crypto_wallet(CryptoCurrency) ->
         <<"crypto_currency">> => convert_crypto_currency_to_swag(CryptoCurrency)
     }).
 
+decode_mobile_commerce(MobileCommerce) ->
+    #domain_MobileCommerce{
+        operator = Operator,
+        phone = Phone
+    } = MobileCommerce,
+    capi_utils:map_to_base64url(#{
+        <<"type"       >> => <<"mobile_commerce">>,
+        <<"phoneNumber">> => decode_mobile_phone(Phone),
+        <<"operator">>    => Operator
+    }).
+
 decode_payment_tool_details({bank_card, V}) ->
     decode_bank_card_details(V, #{<<"detailsType">> => <<"PaymentToolDetailsBankCard">>});
 decode_payment_tool_details({payment_terminal, V}) ->
@@ -103,6 +116,15 @@ decode_payment_tool_details({crypto_currency, CryptoCurrency}) ->
     #{
         <<"detailsType">> => <<"PaymentToolDetailsCryptoWallet">>,
         <<"cryptoCurrency">> => convert_crypto_currency_to_swag(CryptoCurrency)
+    };
+decode_payment_tool_details({mobile_commerce, MobileCommerce}) ->
+    #domain_MobileCommerce{
+        phone = Phone
+    } = MobileCommerce,
+    PhoneNumber = gen_phone_number(decode_mobile_phone(Phone)),
+    #{
+        <<"detailsType">> => <<"PaymentToolDetailsMobileCommerce">>,
+        <<"phoneNumber">> => mask_phone_number(PhoneNumber)
     }.
 
 decode_bank_card_details(BankCard, V) ->
@@ -193,4 +215,8 @@ convert_crypto_currency_to_swag(bitcoin_cash) ->
 convert_crypto_currency_to_swag(CryptoCurrency) when is_atom(CryptoCurrency) ->
     atom_to_binary(CryptoCurrency, utf8).
 
+decode_mobile_phone(#domain_MobilePhone{cc = Cc, ctn = Ctn}) ->
+    #{<<"cc">> => Cc, <<"ctn">> => Ctn}.
 
+gen_phone_number(#{<<"cc">> := Cc, <<"ctn">> := Ctn}) ->
+    <<"+", Cc/binary, Ctn/binary>>.

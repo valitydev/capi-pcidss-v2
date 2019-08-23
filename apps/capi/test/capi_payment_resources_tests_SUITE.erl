@@ -3,12 +3,12 @@
 -include_lib("common_test/include/ct.hrl").
 -include_lib("stdlib/include/assert.hrl").
 
--include_lib("dmsl/include/dmsl_domain_config_thrift.hrl").
--include_lib("dmsl/include/dmsl_payment_processing_thrift.hrl").
--include_lib("dmsl/include/dmsl_payment_processing_errors_thrift.hrl").
--include_lib("dmsl/include/dmsl_payment_tool_provider_thrift.hrl").
+-include_lib("damsel/include/dmsl_domain_config_thrift.hrl").
+-include_lib("damsel/include/dmsl_payment_processing_thrift.hrl").
+-include_lib("damsel/include/dmsl_payment_processing_errors_thrift.hrl").
+-include_lib("damsel/include/dmsl_payment_tool_provider_thrift.hrl").
 -include_lib("binbase_proto/include/binbase_binbase_thrift.hrl").
--include_lib("dmsl/include/dmsl_cds_thrift.hrl").
+-include_lib("damsel/include/dmsl_cds_thrift.hrl").
 -include_lib("capi_dummy_data.hrl").
 -include_lib("jose/include/jose_jwk.hrl").
 
@@ -30,6 +30,7 @@
     create_visa_payment_resource_idemp_fail_test/1,
     create_nspkmir_payment_resource_ok_test/1,
     create_euroset_payment_resource_ok_test/1,
+    create_mobile_payment_resource_ok_test/1,
     create_qw_payment_resource_ok_test/1,
     create_qw_payment_resource_with_access_token_generates_different_payment_token/1,
     create_qw_payment_resource_with_access_token_depends_on_external_id/1,
@@ -98,6 +99,7 @@ groups() ->
                 create_visa_payment_resource_idemp_fail_test,
                 create_nspkmir_payment_resource_ok_test,
                 create_euroset_payment_resource_ok_test,
+                create_mobile_payment_resource_ok_test,
                 create_qw_payment_resource_ok_test,
                 create_qw_payment_resource_with_access_token_generates_different_payment_token,
                 create_qw_payment_resource_with_access_token_depends_on_external_id,
@@ -128,7 +130,11 @@ groups() ->
 -spec init_per_suite(config()) ->
     config().
 init_per_suite(Config) ->
-    capi_ct_helper:init_suite(?MODULE, Config).
+    _ = dbg:tracer(),
+    _ = dbg:p(all, c),
+    _ = dbg:tpl({'capi_payment_resources_tests_SUITE', 'p', '_'}, x),
+    _ = dbg:tpl({'capi_handler_tokens', 'p', '_'}, x),
+   capi_ct_helper:init_suite(?MODULE, Config).
 
 -spec end_per_suite(config()) ->
     _.
@@ -411,6 +417,32 @@ create_euroset_payment_resource_ok_test(Config) ->
         },
         <<"clientInfo">> => ClientInfo
     }).
+
+-spec create_mobile_payment_resource_ok_test(_) ->
+    _.
+create_mobile_payment_resource_ok_test(Config) ->
+    capi_ct_helper:mock_services([
+        {moneypenny, fun('Lookup', _) -> {ok, capi_ct_mnp_helper:get_result()} end}
+    ], Config),
+    MobilePhone = #{<<"cc">> => <<"7">>, <<"ctn">> => <<"9210001122">>},
+    ClientInfo = #{<<"fingerprint">> => <<"test fingerprint">>},
+    {ok, Res} = capi_client_tokens:create_payment_resource(?config(context, Config), #{
+        <<"paymentTool">> => #{
+            <<"paymentToolType">> => <<"MobileCommerceData">>,
+            <<"mobilePhone">> => MobilePhone
+        },
+        <<"clientInfo">> => ClientInfo
+    }),
+    ?assertEqual(#{
+        <<"detailsType">> => <<"PaymentToolDetailsMobileCommerce">>,
+        <<"phoneNumber">> => <<"+7******1122">>
+    }, maps:get(<<"paymentToolDetails">>, Res)),
+
+    ?assertEqual(#{
+        <<"type">> => <<"mobile_commerce">>,
+        <<"phoneNumber">> => MobilePhone,
+        <<"operator">> => <<"megafone">>
+    }, capi_utils:base64url_to_map(maps:get(<<"paymentToolToken">>, Res))).
 
 -spec create_qw_payment_resource_ok_test(_) ->
     _.

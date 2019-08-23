@@ -88,8 +88,9 @@ get_service_modname(payment_tool_provider_samsung_pay) ->
 get_service_modname(binbase) ->
     {binbase_binbase_thrift, 'Binbase'};
 get_service_modname(bender) ->
-    {bender_thrift, 'Bender'}.
-
+    {bender_thrift, 'Bender'};
+get_service_modname(moneypenny) ->
+    {moneypenny_mnp_thrift, 'Mnp'}.
 
 get_service_deadline(ServiceName) ->
     ServiceDeadlines = genlib_app:env(?MODULE, service_deadlines, #{}),
