@@ -207,6 +207,7 @@ encode_binbase_payment_system(<<"AMERICAN EXPRESS">>)          -> amex;
 encode_binbase_payment_system(<<"DINERS CLUB INTERNATIONAL">>) -> dinersclub;
 encode_binbase_payment_system(<<"DISCOVER">>)                  -> discover;
 encode_binbase_payment_system(<<"UNIONPAY">>)                  -> unionpay;
+encode_binbase_payment_system(<<"CHINA UNION PAY">>)           -> unionpay;
 encode_binbase_payment_system(<<"JCB">>)                       -> jcb;
 encode_binbase_payment_system(<<"NSPK MIR">>)                  -> nspkmir;
 encode_binbase_payment_system(_) ->
