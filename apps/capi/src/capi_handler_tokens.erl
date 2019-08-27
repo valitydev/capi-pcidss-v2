@@ -3,7 +3,6 @@
 -include_lib("damsel/include/dmsl_domain_thrift.hrl").
 -include_lib("damsel/include/dmsl_cds_thrift.hrl").
 -include_lib("tds_proto/include/tds_proto_storage_thrift.hrl").
--include_lib("binbase_proto/include/binbase_binbase_thrift.hrl").
 -include_lib("damsel/include/dmsl_payment_tool_provider_thrift.hrl").
 -include_lib("moneypenny/include/moneypenny_mnp_thrift.hrl").
 
@@ -155,63 +154,32 @@ put_card_data_to_cds(CardData, SessionData, {ExternalID, IdempotentKey}, Context
     end.
 
 put_card_to_cds(CardData, SessionData, Context) ->
-    BinData = lookup_bank_info(CardData#'CardData'.pan, Context),
-    Call = {cds_storage, 'PutCard', [CardData]},
-    case capi_handler_utils:service_call(Call, Context) of
-        {ok, #'PutCardResult'{bank_card = BankCard}} ->
-            {bank_card, expand_card_info(BankCard, BinData, undef_cvv(SessionData))};
-        {exception, #'InvalidCardData'{}} ->
-            throw({ok, logic_error(invalidRequest, <<"Card data is invalid">>)})
+    case capi_bankcard:lookup_bank_info(CardData#'CardData'.pan, Context) of
+        {ok, BankInfo} ->
+            Call = {cds_storage, 'PutCard', [CardData]},
+            case capi_handler_utils:service_call(Call, Context) of
+                {ok, #'PutCardResult'{bank_card = BankCard}} ->
+                    {bank_card, expand_card_info(BankCard, BankInfo, undef_cvv(SessionData))};
+                {exception, #'InvalidCardData'{}} ->
+                    throw({ok, {400, #{}, logic_error(invalidRequest, <<"Card data is invalid">>)}})
+            end;
+        {error, _Reason} ->
+            throw({ok, {400, #{}, logic_error(invalidRequest, <<"Unsupported card">>)}})
     end.
 
-lookup_bank_info(Pan, Context) ->
-    RequestVersion = {'last', #binbase_Last{}},
-    Call = {binbase, 'Lookup', [Pan, RequestVersion]},
-    case capi_handler_utils:service_call(Call, Context) of
-        {ok, #'binbase_ResponseData'{bin_data = BinData, version = Version}} ->
-            {BinData, Version};
-        {exception, #'binbase_BinNotFound'{}} ->
-            throw({ok, logic_error(invalidRequest, <<"Card data is invalid">>)})
-    end.
-
-expand_card_info(BankCard, {BinData, Version}, HaveCVV) ->
-    try
-        BankCard#'domain_BankCard'{
-            payment_system = encode_binbase_payment_system(BinData#'binbase_BinData'.payment_system),
-            issuer_country = capi_handler_encoder:encode_residence(BinData#'binbase_BinData'.iso_country_code),
-            bank_name = BinData#'binbase_BinData'.bank_name,
-            metadata = #{
-                ?CAPI_NS =>
-                    {obj, #{
-                        {str, <<"version">>} => {i, Version}
-                    }
-                }
-            },
-            is_cvv_empty = HaveCVV
-        }
-    catch
-        throw:{encode_binbase_payment_system, invalid_payment_system} ->
-            throw({ok, logic_error(invalidRequest, <<"Unsupported card">>)});
-        throw:{encode_residence, invalid_residence} ->
-            throw({ok, logic_error(invalidRequest, <<"Unsupported card">>)})
-    end.
-
-encode_binbase_payment_system(<<"VISA">>)                      -> visa;
-encode_binbase_payment_system(<<"VISA/DANKORT">>)              -> visa;         % supposedly 🤔
-encode_binbase_payment_system(<<"MASTERCARD">>)                -> mastercard;
-% encode_binbase_payment_system(<<"???">>)                       -> visaelectron;
-encode_binbase_payment_system(<<"MAESTRO">>)                   -> maestro;
-% encode_binbase_payment_system(<<"???">>)                       -> forbrugsforeningen;
-encode_binbase_payment_system(<<"DANKORT">>)                   -> dankort;
-encode_binbase_payment_system(<<"AMERICAN EXPRESS">>)          -> amex;
-encode_binbase_payment_system(<<"DINERS CLUB INTERNATIONAL">>) -> dinersclub;
-encode_binbase_payment_system(<<"DISCOVER">>)                  -> discover;
-encode_binbase_payment_system(<<"UNIONPAY">>)                  -> unionpay;
-encode_binbase_payment_system(<<"CHINA UNION PAY">>)           -> unionpay;
-encode_binbase_payment_system(<<"JCB">>)                       -> jcb;
-encode_binbase_payment_system(<<"NSPK MIR">>)                  -> nspkmir;
-encode_binbase_payment_system(_) ->
-    throw({encode_binbase_payment_system, invalid_payment_system}).
+expand_card_info(BankCard, #{
+    payment_system  := PaymentSystem,
+    bank_name       := BankName,
+    issuer_country  := IssuerCountry,
+    metadata        := Metadata
+}, HaveCVV) ->
+    BankCard#'domain_BankCard'{
+        payment_system  = PaymentSystem,
+        issuer_country  = IssuerCountry,
+        bank_name       = BankName,
+        metadata        = #{?CAPI_NS => capi_msgp_marshalling:marshal(Metadata)},
+        is_cvv_empty    = HaveCVV
+    }.
 
 %% Seems to fit within PCIDSS requirments for all PAN lengths
 get_first6(CardNumber) ->
