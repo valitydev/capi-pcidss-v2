@@ -161,10 +161,10 @@ put_card_to_cds(CardData, SessionData, Context) ->
                 {ok, #'PutCardResult'{bank_card = BankCard}} ->
                     {bank_card, expand_card_info(BankCard, BankInfo, undef_cvv(SessionData))};
                 {exception, #'InvalidCardData'{}} ->
-                    throw({ok, {400, #{}, logic_error(invalidRequest, <<"Card data is invalid">>)}})
+                    throw({ok, logic_error(invalidRequest, <<"Card data is invalid">>)})
             end;
         {error, _Reason} ->
-            throw({ok, {400, #{}, logic_error(invalidRequest, <<"Unsupported card">>)}})
+            throw({ok, logic_error(invalidRequest, <<"Unsupported card">>)})
     end.
 
 expand_card_info(BankCard, #{

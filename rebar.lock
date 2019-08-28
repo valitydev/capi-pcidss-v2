@@ -7,7 +7,7 @@
   0},
  {<<"binbase_proto">>,
   {git,"git@github.com:rbkmoney/binbase-proto.git",
-       {ref,"13bcd24e994ccfd1f25af1cda081399b9b58a014"}},
+       {ref,"d0e136deb107683fc6d22ed687a1e6b7c589cd6d"}},
   0},
  {<<"cache">>,{pkg,<<"cache">>,<<"2.2.0">>},1},
  {<<"certifi">>,{pkg,<<"certifi">>,<<"2.5.1">>},1},
