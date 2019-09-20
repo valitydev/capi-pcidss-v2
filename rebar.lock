@@ -62,7 +62,7 @@
  {<<"mimerl">>,{pkg,<<"mimerl">>,<<"1.2.0">>},1},
  {<<"moneypenny">>,
   {git,"git@github.com:rbkmoney/moneypenny.git",
-       {ref,"c6c52c98b4083757867a77d86c6005d31ef11ba7"}},
+       {ref,"219fefcd57c987a448f6e2299e0e171a85ec2a34"}},
   0},
  {<<"msgpack_proto">>,
   {git,"git@github.com:rbkmoney/msgpack-proto.git",

@@ -418,7 +418,7 @@ process_mobile_commerce_data(Data, Context) ->
     {{mobile_commerce, MobileCommerce}, <<>>}.
 
 get_mobile_operator(MobilePhone, Context) ->
-    PhoneNumber = encode_phone_number(MobilePhone),
+    PhoneNumber = encode_request_params(MobilePhone),
     Call = {moneypenny, 'Lookup', [PhoneNumber]},
     case capi_handler_utils:service_call(Call, Context) of
         {ok, #mnp_ResponseData{operator = Operator}} ->
@@ -429,10 +429,12 @@ get_mobile_operator(MobilePhone, Context) ->
             throw({ok, logic_error(invalidRequest, <<"Operator not found.">>)})
     end.
 
-encode_phone_number(#{<<"cc">> := Cc, <<"ctn">> := Ctn}) ->
-    #mnp_PhoneNumber{
-        cc = Cc,
-        ctn = Ctn
+encode_request_params(#{<<"cc">> := Cc, <<"ctn">> := Ctn}) ->
+    #mnp_RequestParams{
+        phone = #mnp_PhoneNumber{
+            cc = Cc,
+            ctn = Ctn
+        }
     }.
 
 encode_mobile_commerce(MobilePhone, Operator) ->
