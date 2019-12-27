@@ -4,6 +4,7 @@
 -include_lib("damsel/include/dmsl_domain_thrift.hrl").
 
 -export([logic_error/2]).
+-export([validation_error/1]).
 -export([server_error/1]).
 
 -export([service_call/2]).
@@ -40,6 +41,36 @@ logic_error(externalIDConflict, ExternalID) ->
 logic_error(Code, Message) ->
     Data = #{<<"code">> => genlib:to_binary(Code), <<"message">> => genlib:to_binary(Message)},
     create_error_resp(400, Data).
+
+-spec validation_error
+    (capi_bankcard:reason()) -> response().
+
+validation_error(unrecognized) ->
+    Data = #{
+        <<"code">> => <<"invalidRequest">>,
+        <<"message">> => <<"Unrecognized bank card issuer">>},
+    create_error_resp(400, Data);
+validation_error({invalid, K, C}) ->
+    Data = #{
+        <<"code">> => <<"invalidRequest">>,
+        <<"message">> => validation_msg(C, K)},
+    create_error_resp(400, Data).
+
+validation_msg(expiration, _Key) ->
+    <<"Invalid expiration date">>;
+validation_msg(luhn, Key) ->
+    <<"Invalid ", (key_to_binary(Key))/binary, " checksum">>;
+validation_msg({length, _}, Key) ->
+    <<"Invalid ", (key_to_binary(Key))/binary, " length">>.
+
+key_to_binary(cardnumber) ->
+    <<"cardNumber">>;
+key_to_binary(exp_date) ->
+    <<"expDate">>;
+key_to_binary(cardholder) ->
+    <<"cardHolder">>;
+key_to_binary(cvv) ->
+    <<"cvv">>.
 
 create_error_resp(Code, Data) ->
     create_error_resp(Code, #{}, Data).

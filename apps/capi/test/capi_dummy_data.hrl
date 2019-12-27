@@ -4,9 +4,9 @@
 
 -define(BANK_CARD, #domain_BankCard{
     token = ?STRING,
-    payment_system = visa,
-    bin = <<"411111">>,
-    masked_pan = <<"411111******1111">>
+    payment_system = mastercard,
+    bin = <<"532130">>,
+    masked_pan = <<"532130******7892">>
 }).
 
 -define(BINBASE_LOOKUP_RESULT, ?BINBASE_LOOKUP_RESULT(<<"MASTERCARD">>)).
@@ -29,10 +29,10 @@
     ?UNWRAPPED_PAYMENT_TOOL(
         Details,
         {tokenized_card, #paytoolprv_TokenizedCard{
-            dpan = ?STRING,
+            dpan = <<"5321301234567892">>,
             exp_date = #paytoolprv_ExpDate{
                 month = 10,
-                year = 2018
+                year = 2028
             },
             auth_data = {auth_3ds, #paytoolprv_Auth3DS{
                 cryptogram = ?STRING,
@@ -44,9 +44,9 @@
 -define(UNWRAPPED_PAYMENT_TOOL(Details, PaymentData), #paytoolprv_UnwrappedPaymentTool{
     payment_data = PaymentData,
     card_info = #paytoolprv_CardInfo{
-        display_name = <<"Visa 1234">>,
+        display_name = <<"Master 7892">>,
         cardholder_name = ?STRING,
-        last_4_digits = <<"1234">>,
+        last_4_digits = <<"7892">>,
         card_class = debit,
         payment_system = mastercard
     },
