@@ -78,6 +78,7 @@ start_capi(Config) ->
 -spec start_capi(config(), list()) ->
     [app_name()].
 start_capi(Config, ExtraEnv) ->
+    JwkPath = get_keysource("keys/local/jwk.json", Config),
     CapiEnv = ExtraEnv ++ [
         {ip, ?CAPI_IP},
         {port, ?CAPI_PORT},
@@ -94,6 +95,10 @@ start_capi(Config, ExtraEnv) ->
                     payment_resources   => #{}
                 }
             }
+        }},
+        {lechiffre_opts,  #{
+            encryption_key_path => JwkPath,
+            decryption_key_paths => [JwkPath]
         }}
     ],
     start_app(capi_pcidss, CapiEnv).

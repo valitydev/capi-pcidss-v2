@@ -1,7 +1,7 @@
 -module(capi_handler_tokens).
 
 -include_lib("damsel/include/dmsl_domain_thrift.hrl").
--include_lib("damsel/include/dmsl_cds_thrift.hrl").
+-include_lib("cds_proto/include/cds_proto_storage_thrift.hrl").
 -include_lib("tds_proto/include/tds_proto_storage_thrift.hrl").
 -include_lib("damsel/include/dmsl_payment_tool_provider_thrift.hrl").
 -include_lib("moneypenny/include/moneypenny_mnp_thrift.hrl").
@@ -49,7 +49,8 @@ process_request('CreatePaymentResource' = OperationID, Req, Context) ->
                 payment_session_id = PaymentSessionID,
                 client_info = capi_handler_encoder:encode_client_info(ClientInfo)
             },
-        {ok, {201, #{}, capi_handler_decoder:decode_disposable_payment_resource(PaymentResource)}}
+        EncryptedToken = capi_crypto:create_encrypted_payment_tool_token(IdempotentKey, PaymentTool),
+        {ok, {201, #{}, capi_handler_decoder:decode_disposable_payment_resource(PaymentResource, EncryptedToken)}}
     catch
         Result -> Result
     end;
@@ -92,7 +93,7 @@ validate_ip(IP) ->
 process_card_data(Data, IdempotentParams, Context) ->
     SessionData = encode_session_data(Data),
     CardData = encode_card_data(Data),
-    BankInfo = get_bank_info(CardData#'CardData'.pan, Context),
+    BankInfo = get_bank_info(CardData#'cds_PutCardData'.pan, Context),
     PaymentSystem = capi_bankcard:payment_system(BankInfo),
     case capi_bankcard:validate(CardData, SessionData, PaymentSystem) of
         ok ->
@@ -104,38 +105,37 @@ process_card_data(Data, IdempotentParams, Context) ->
 
 process_card_data_result(
     {{bank_card, BankCard}, SessionID},
-    #'CardData'{
+    #cds_PutCardData{
         pan  = CardNumber
     }
 ) ->
     {
         {bank_card, BankCard#domain_BankCard{
             bin = get_first6(CardNumber),
-            masked_pan = get_last4(CardNumber)
+            last_digits = get_last4(CardNumber)
         }},
         SessionID
     }.
 
 encode_session_data(CardData) ->
-    #'SessionData'{
-        auth_data = {card_security_code, #'CardSecurityCode'{
+    #cds_SessionData{
+        auth_data = {card_security_code, #cds_CardSecurityCode{
             % dirty hack for cds support empty cvv bank cards
             value = maps:get(<<"cvv">>, CardData, <<"">>)
         }}
     }.
 
 encode_card_data(CardData) ->
-    {Month, Year} = parse_exp_date(genlib_map:get(<<"expDate">>, CardData)),
+    ExpDate = parse_exp_date(genlib_map:get(<<"expDate">>, CardData)),
     CardNumber = genlib:to_binary(genlib_map:get(<<"cardNumber">>, CardData)),
-    #'CardData'{
+    #cds_PutCardData{
         pan  = CardNumber,
-        exp_date = #'ExpDate'{
-            month = Month,
-            year = Year
-        },
+        exp_date = ExpDate,
         cardholder_name = genlib_map:get(<<"cardHolder">>, CardData)
     }.
 
+parse_exp_date(undefined) ->
+    undefined;
 parse_exp_date(ExpDate) when is_binary(ExpDate) ->
     [Month, Year0] = binary:split(ExpDate, <<"/">>),
     Year = case genlib:to_int(Year0) of
@@ -144,7 +144,10 @@ parse_exp_date(ExpDate) when is_binary(ExpDate) ->
         Y ->
             Y
     end,
-    {genlib:to_int(Month), Year}.
+    #cds_ExpDate{
+        month = genlib:to_int(Month),
+        year = Year
+    }.
 
 put_card_data_to_cds(CardData, SessionData, {ExternalID, IdempotentKey}, BankInfo, Context) ->
     #{woody_context := WoodyCtx} = Context,
@@ -160,12 +163,14 @@ put_card_data_to_cds(CardData, SessionData, {ExternalID, IdempotentKey}, BankInf
             throw({ok, logic_error(externalIDConflict, ExternalID)})
     end.
 
-put_card_to_cds(CardData, SessionData, BankInfo, Context) ->
-    Call = {cds_storage, 'PutCard', [CardData]},
+put_card_to_cds(PutCardData, SessionData, BankInfo, Context) ->
+    Call = {cds_storage, 'PutCard', [PutCardData]},
     case capi_handler_utils:service_call(Call, Context) of
-        {ok, #'PutCardResult'{bank_card = BankCard}} ->
-            {bank_card, expand_card_info(BankCard, BankInfo, undef_cvv(SessionData))};
-        {exception, #'InvalidCardData'{}} ->
+        {ok, #cds_PutCardResult{bank_card = BankCard}} ->
+            ExpDate = PutCardData#cds_PutCardData.exp_date,
+            CardholderName = PutCardData#cds_PutCardData.cardholder_name,
+            {bank_card, expand_card_info(BankCard, BankInfo, undef_cvv(SessionData), ExpDate, CardholderName)};
+        {exception, #cds_InvalidCardData{}} ->
             throw({ok, logic_error(invalidRequest, <<"Card data is invalid">>)})
     end.
 
@@ -174,13 +179,24 @@ expand_card_info(BankCard, #{
     bank_name       := BankName,
     issuer_country  := IssuerCountry,
     metadata        := Metadata
-}, HaveCVV) ->
-    BankCard#'domain_BankCard'{
+}, HaveCVV, ExpDate, CardholderName) ->
+    #domain_BankCard{
+        token           = BankCard#cds_BankCard.token,
+        bin             = BankCard#cds_BankCard.bin,
+        last_digits     = BankCard#cds_BankCard.last_digits,
         payment_system  = PaymentSystem,
         issuer_country  = IssuerCountry,
         bank_name       = BankName,
         metadata        = #{?CAPI_NS => capi_msgp_marshalling:marshal(Metadata)},
-        is_cvv_empty    = HaveCVV
+        is_cvv_empty    = HaveCVV,
+        exp_date        = encode_exp_date(ExpDate),
+        cardholder_name = CardholderName
+    }.
+
+encode_exp_date(#cds_ExpDate{month = Month, year = Year}) ->
+    #domain_BankCardExpDate{
+        month = Month,
+        year = Year
     }.
 
 %% Seems to fit within PCIDSS requirments for all PAN lengths
@@ -189,19 +205,13 @@ get_first6(CardNumber) ->
 get_last4(CardNumber) ->
     binary:part(CardNumber, {byte_size(CardNumber), -4}).
 
-undef_cvv(#'SessionData'{
-        auth_data = {card_security_code, #'CardSecurityCode'{
-            value = <<"">>
+undef_cvv(#cds_SessionData{
+        auth_data = {card_security_code, #cds_CardSecurityCode{
+            value = Value
         }}
     }) ->
-    true;
-undef_cvv(#'SessionData'{
-        auth_data = {card_security_code, #'CardSecurityCode'{
-            value = _Value
-        }}
-    }) ->
-    false;
-undef_cvv(#'SessionData'{}) ->
+    Value == <<>>;
+undef_cvv(#cds_SessionData{}) ->
     undefined.
 
 gen_random_id() ->
@@ -255,13 +265,13 @@ process_tokenized_card_data(Data, IdempotentParams, Context) ->
         {exception, #'InvalidRequest'{}} ->
             throw({ok, logic_error(invalidRequest, <<"Tokenized card data is invalid">>)})
     end,
-    CardData = encode_tokenized_card_data(UnwrappedPaymentTool),
+    PutCardData = encode_tokenized_card_data(UnwrappedPaymentTool),
     SessionData = encode_tokenized_session_data(UnwrappedPaymentTool),
-    BankInfo = get_bank_info(CardData#'CardData'.pan, Context),
+    BankInfo = get_bank_info(PutCardData#cds_PutCardData.pan, Context),
     PaymentSystem = capi_bankcard:payment_system(BankInfo),
-    case capi_bankcard:validate(CardData, SessionData, PaymentSystem) of
+    case capi_bankcard:validate(PutCardData, SessionData, PaymentSystem) of
         ok ->
-            Result = put_card_data_to_cds(CardData, SessionData, IdempotentParams, BankInfo, Context),
+            Result = put_card_data_to_cds(PutCardData, SessionData, IdempotentParams, BankInfo, Context),
             process_tokenized_card_data_result(Result, UnwrappedPaymentTool);
         {error, Error} ->
             throw({ok, validation_error(Error)})
@@ -313,7 +323,7 @@ process_tokenized_card_data_result(
         {bank_card, BankCard#domain_BankCard{
             bin            = get_tokenized_bin(PaymentData),
             payment_system = PaymentSystem,
-            masked_pan     = get_tokenized_pan(Last4, PaymentData),
+            last_digits    = get_tokenized_pan(Last4, PaymentData),
             token_provider = get_payment_token_provider(PaymentDetails, PaymentData),
             %% Не учитываем наличие cvv для токенизированных карт, даже если проводим их как обычные.
             is_cvv_empty   = undefined
@@ -323,8 +333,8 @@ process_tokenized_card_data_result(
 
 get_tokenized_bin({card, #paytoolprv_Card{pan = PAN}}) ->
     get_first6(PAN);
-get_tokenized_bin(_PaymentData) ->
-    undefined.
+get_tokenized_bin({tokenized_card, _}) ->
+    <<>>.
 
 % Prefer to get last4 from the PAN itself rather than using the one from the adapter
 % On the other hand, getting a DPAN and no last4 from the adapter is unsupported
@@ -359,9 +369,9 @@ encode_tokenized_card_data(#paytoolprv_UnwrappedPaymentTool{
         cardholder_name = CardholderName
     }
 }) ->
-    #'CardData'{
+    #cds_PutCardData{
         pan  = DPAN,
-        exp_date = #'ExpDate'{
+        exp_date = #cds_ExpDate{
             month = Month,
             year = Year
         },
@@ -379,9 +389,9 @@ encode_tokenized_card_data(#paytoolprv_UnwrappedPaymentTool{
         cardholder_name = CardholderName
     }
 }) ->
-    #'CardData'{
+    #cds_PutCardData{
         pan  = PAN,
-        exp_date = #'ExpDate'{
+        exp_date = #cds_ExpDate{
             month = Month,
             year = Year
         },
@@ -396,8 +406,8 @@ encode_tokenized_session_data(#paytoolprv_UnwrappedPaymentTool{
         }}
     }}
 }) ->
-    #'SessionData'{
-        auth_data = {auth_3ds, #'Auth3DS'{
+    #cds_SessionData{
+        auth_data = {auth_3ds, #cds_Auth3DS{
             cryptogram = Cryptogram,
             eci = ECI
         }}
@@ -405,8 +415,8 @@ encode_tokenized_session_data(#paytoolprv_UnwrappedPaymentTool{
 encode_tokenized_session_data(#paytoolprv_UnwrappedPaymentTool{
     payment_data = {card, #paytoolprv_Card{}}
 }) ->
-    #'SessionData'{
-        auth_data = {card_security_code, #'CardSecurityCode'{
+    #cds_SessionData{
+        auth_data = {card_security_code, #cds_CardSecurityCode{
             %% TODO dirty hack for test GooglePay card data
             value = <<"">>
         }}

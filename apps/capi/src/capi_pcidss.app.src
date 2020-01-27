@@ -11,6 +11,7 @@
         binbase_proto,
         tds_proto,
         damsel,
+        lechiffre,
         moneypenny,
         snowflake,
         rfc3339,
@@ -24,7 +25,8 @@
         cowboy_cors,
         cowboy_access_log,
         erl_health,
-        uac
+        uac,
+        cds_proto
     ]},
     {env, []}
 ]}.

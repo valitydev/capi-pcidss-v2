@@ -8,6 +8,7 @@
         thrift,
         damsel,
         woody,
-        scoper
+        scoper,
+        cds_proto
     ]}
 ]}.

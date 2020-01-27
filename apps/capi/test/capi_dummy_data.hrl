@@ -1,12 +1,11 @@
 -define(STRING, <<"TEST">>).
 -define(INTEGER, 10000).
 -define(TIMESTAMP, <<"2016-03-22T06:12:27Z">>).
-
--define(BANK_CARD, #domain_BankCard{
+-define(DPAN, <<"4111111111111234">>).
+-define(BANK_CARD, #cds_BankCard{
     token = ?STRING,
-    payment_system = mastercard,
     bin = <<"532130">>,
-    masked_pan = <<"532130******7892">>
+    last_digits = <<"7892">>
 }).
 
 -define(BINBASE_LOOKUP_RESULT, ?BINBASE_LOOKUP_RESULT(<<"MASTERCARD">>)).
@@ -21,7 +20,7 @@
     version = ?INTEGER
 }).
 
--define(PUT_CARD_RESULT, #'PutCardResult'{
+-define(PUT_CARD_RESULT, #'cds_PutCardResult'{
     bank_card = ?BANK_CARD
 }).
 
@@ -53,7 +52,7 @@
     details = Details
 }).
 
--define(PUT_CARD_DATA_RESULT, #'PutCardResult'{
+-define(PUT_CARD_DATA_RESULT, #'cds_PutCardResult'{
     bank_card = ?BANK_CARD,
     session_id = ?STRING
 }).

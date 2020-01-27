@@ -16,7 +16,7 @@
 -module(capi_bankcard).
 
 -include_lib("binbase_proto/include/binbase_binbase_thrift.hrl").
--include_lib("damsel/include/dmsl_cds_thrift.hrl").
+-include_lib("cds_proto/include/cds_proto_storage_thrift.hrl").
 
 -export([lookup_bank_info/2]).
 -export([validate/3]).
@@ -36,12 +36,11 @@
         issuer_country
     }.
 
--type cardholder_data() :: dmsl_cds_thrift:'CardData'().
--type session_data() :: dmsl_cds_thrift:'SessionData'().
+-type card_data() :: cds_proto_storage_thrift:'PutCardData'().
+-type session_data() :: cds_proto_storage_thrift:'SessionData'().
 -type payment_system() :: dmsl_domain_thrift:'BankCardPaymentSystem'().
 -type reason() :: unrecognized |{invalid, cardnumber | cvv | exp_date, check()}.
 
--export_type([cardholder_data/0]).
 -export_type([session_data/0]).
 -export_type([payment_system/0]).
 -export_type([reason/0]).
@@ -168,23 +167,23 @@ decode_issuer_country(undefined) ->
 payment_system(BankInfo) ->
     maps:get(payment_system, BankInfo).
 
--spec validate(cardholder_data(), session_data() | undefined, payment_system()) ->
+-spec validate(card_data(), session_data() | undefined, payment_system()) ->
     ok | {error, reason()}.
 
-validate(CardData, SessionData, PaymentSystem) ->
+validate(PutCardData, SessionData, PaymentSystem) ->
     Rulesets = get_payment_system_assertions(),
     Assertions = maps:get(PaymentSystem, Rulesets, []),
-    validate_card_data(merge_data(CardData, SessionData), Assertions).
+    validate_card_data(merge_data(PutCardData, SessionData), Assertions).
 
 merge_data(CardData, undefined) ->
     convert_card_data(CardData);
-merge_data(CardData, #'SessionData'{auth_data = AuthData}) ->
+merge_data(CardData, #cds_SessionData{auth_data = AuthData}) ->
     CVV = get_cvv_from_session_data(AuthData),
     CardDataMap = convert_card_data(CardData),
     CardDataMap#{cvv => maybe_undefined(CVV)}.
 
 get_cvv_from_session_data({card_security_code, AuthData}) ->
-    AuthData#'CardSecurityCode'.value;
+    AuthData#cds_CardSecurityCode.value;
 get_cvv_from_session_data(_) ->
     undefined.
 
@@ -332,10 +331,10 @@ get_payment_system_assertions() ->
     }.
 
 convert_card_data(CardData) ->
-    #'CardData' {
+    #cds_PutCardData{
         pan = PAN,
         cardholder_name = Cardholder,
-        exp_date = #'ExpDate'{
+        exp_date = #cds_ExpDate{
             month = Month,
             year = Year
         }
