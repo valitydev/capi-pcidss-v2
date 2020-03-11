@@ -186,7 +186,7 @@ create_visa_payment_resource_ok_test(Config) ->
         {cds_storage, fun
             ('PutSession', _) -> {ok, ok};
             ('PutCard', [
-                #cds_PutCardData{pan = <<"411111", _:6/binary, Mask:4/binary>>}
+                #cds_CardData{pan = <<"411111", _:6/binary, Mask:4/binary>>}
             ]) ->
                 {ok, #cds_PutCardResult{
                     bank_card = #cds_BankCard{
@@ -224,7 +224,7 @@ create_visa_with_empty_cvv_ok_test(Config) ->
         {cds_storage, fun
             ('PutSession', _) -> {ok, ok};
             ('PutCard', [
-                #cds_PutCardData{pan = <<"411111", _:6/binary, Mask:4/binary>>}
+                #cds_CardData{pan = <<"411111", _:6/binary, Mask:4/binary>>}
             ]) ->
                 {ok, #cds_PutCardResult{
                     bank_card = #cds_BankCard{
@@ -308,7 +308,7 @@ create_visa_payment_resource_idemp_ok_test(Config) ->
         {cds_storage, fun
             ('PutSession', _) -> {ok, ok};
             ('PutCard', [
-                #cds_PutCardData{pan = <<"411111", _:6/binary, Mask:4/binary>>}
+                #cds_CardData{pan = <<"411111", _:6/binary, Mask:4/binary>>}
             ]) ->
                 {ok, #cds_PutCardResult{
                     bank_card = #cds_BankCard{
@@ -363,7 +363,7 @@ create_visa_payment_resource_idemp_fail_test(Config) ->
         {cds_storage, fun
             ('PutSession', _) -> {ok, ok};
             ('PutCard', [
-                #cds_PutCardData{pan = <<"532130", _:6/binary, LastDigits:4/binary>>}
+                #cds_CardData{pan = <<"532130", _:6/binary, LastDigits:4/binary>>}
             ]) ->
                 {ok, #cds_PutCardResult{
                     bank_card = #cds_BankCard{
@@ -373,7 +373,7 @@ create_visa_payment_resource_idemp_fail_test(Config) ->
                     }
                 }};
             ('PutCard', [
-                #cds_PutCardData{pan = <<"411111", _:6/binary, LastDigits:4/binary>>}
+                #cds_CardData{pan = <<"411111", _:6/binary, LastDigits:4/binary>>}
             ]) ->
                 {ok, #cds_PutCardResult{
                     bank_card = #cds_BankCard{
@@ -417,7 +417,7 @@ create_nspkmir_payment_resource_ok_test(Config) ->
         {cds_storage, fun
             ('PutSession', _) -> {ok, ok};
             ('PutCard', [
-                #cds_PutCardData{pan = <<"22022002", _:6/binary, LastDigits:2/binary>>}
+                #cds_CardData{pan = <<"22022002", _:6/binary, LastDigits:2/binary>>}
             ]) ->
                 {ok, #cds_PutCardResult{
                     bank_card = #cds_BankCard{

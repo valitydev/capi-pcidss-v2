@@ -92,29 +92,40 @@ validate_ip(IP) ->
 
 process_card_data(Data, IdempotentParams, Context) ->
     SessionData = encode_session_data(Data),
-    CardData = encode_card_data(Data),
-    BankInfo = get_bank_info(CardData#'cds_PutCardData'.pan, Context),
+    {CardData, ExtraCardData} = encode_card_data(Data),
+    BankInfo = get_bank_info(CardData#'cds_CardData'.pan, Context),
     PaymentSystem = capi_bankcard:payment_system(BankInfo),
-    case capi_bankcard:validate(CardData, SessionData, PaymentSystem) of
+    case capi_bankcard:validate(CardData, ExtraCardData, SessionData, PaymentSystem) of
         ok ->
             Result = put_card_data_to_cds(CardData, SessionData, IdempotentParams, BankInfo, Context),
-            process_card_data_result(Result, CardData);
+            process_card_data_result(Result, CardData, ExtraCardData);
         {error, Error} ->
             throw({ok, validation_error(Error)})
     end.
 
 process_card_data_result(
     {{bank_card, BankCard}, SessionID},
-    #cds_PutCardData{
+    #cds_CardData{
         pan  = CardNumber
-    }
+    },
+    ExtraCardData
 ) ->
     {
         {bank_card, BankCard#domain_BankCard{
             bin = get_first6(CardNumber),
-            last_digits = get_last4(CardNumber)
+            last_digits = get_last4(CardNumber),
+            exp_date = encode_exp_date(genlib_map:get(exp_date, ExtraCardData)),
+            cardholder_name = genlib_map:get(cardholder, ExtraCardData)
         }},
         SessionID
+    }.
+
+encode_exp_date(undefined) ->
+    undefined;
+encode_exp_date({Month, Year}) ->
+    #domain_BankCardExpDate{
+        year = Year,
+        month = Month
     }.
 
 encode_session_data(CardData) ->
@@ -126,12 +137,17 @@ encode_session_data(CardData) ->
     }.
 
 encode_card_data(CardData) ->
-    ExpDate = parse_exp_date(genlib_map:get(<<"expDate">>, CardData)),
     CardNumber = genlib:to_binary(genlib_map:get(<<"cardNumber">>, CardData)),
-    #cds_PutCardData{
-        pan  = CardNumber,
-        exp_date = ExpDate,
-        cardholder_name = genlib_map:get(<<"cardHolder">>, CardData)
+    ExpDate = parse_exp_date(genlib_map:get(<<"expDate">>, CardData)),
+    Cardholder = genlib_map:get(<<"cardHolder">>, CardData),
+    {
+        #cds_CardData{
+            pan = CardNumber
+        },
+        genlib_map:compact(#{
+            cardholder => Cardholder,
+            exp_date => ExpDate
+        })
     }.
 
 parse_exp_date(undefined) ->
@@ -144,10 +160,7 @@ parse_exp_date(ExpDate) when is_binary(ExpDate) ->
         Y ->
             Y
     end,
-    #cds_ExpDate{
-        month = genlib:to_int(Month),
-        year = Year
-    }.
+    {genlib:to_int(Month), Year}.
 
 put_card_data_to_cds(CardData, SessionData, {ExternalID, IdempotentKey}, BankInfo, Context) ->
     #{woody_context := WoodyCtx} = Context,
@@ -163,13 +176,11 @@ put_card_data_to_cds(CardData, SessionData, {ExternalID, IdempotentKey}, BankInf
             throw({ok, logic_error(externalIDConflict, ExternalID)})
     end.
 
-put_card_to_cds(PutCardData, SessionData, BankInfo, Context) ->
-    Call = {cds_storage, 'PutCard', [PutCardData]},
+put_card_to_cds(CardData, SessionData, BankInfo, Context) ->
+    Call = {cds_storage, 'PutCard', [CardData]},
     case capi_handler_utils:service_call(Call, Context) of
         {ok, #cds_PutCardResult{bank_card = BankCard}} ->
-            ExpDate = PutCardData#cds_PutCardData.exp_date,
-            CardholderName = PutCardData#cds_PutCardData.cardholder_name,
-            {bank_card, expand_card_info(BankCard, BankInfo, undef_cvv(SessionData), ExpDate, CardholderName)};
+            {bank_card, expand_card_info(BankCard, BankInfo, undef_cvv(SessionData))};
         {exception, #cds_InvalidCardData{}} ->
             throw({ok, logic_error(invalidRequest, <<"Card data is invalid">>)})
     end.
@@ -179,7 +190,7 @@ expand_card_info(BankCard, #{
     bank_name       := BankName,
     issuer_country  := IssuerCountry,
     metadata        := Metadata
-}, HaveCVV, ExpDate, CardholderName) ->
+}, HaveCVV) ->
     #domain_BankCard{
         token           = BankCard#cds_BankCard.token,
         bin             = BankCard#cds_BankCard.bin,
@@ -188,15 +199,7 @@ expand_card_info(BankCard, #{
         issuer_country  = IssuerCountry,
         bank_name       = BankName,
         metadata        = #{?CAPI_NS => capi_msgp_marshalling:marshal(Metadata)},
-        is_cvv_empty    = HaveCVV,
-        exp_date        = encode_exp_date(ExpDate),
-        cardholder_name = CardholderName
-    }.
-
-encode_exp_date(#cds_ExpDate{month = Month, year = Year}) ->
-    #domain_BankCardExpDate{
-        month = Month,
-        year = Year
+        is_cvv_empty    = HaveCVV
     }.
 
 %% Seems to fit within PCIDSS requirments for all PAN lengths
@@ -265,13 +268,13 @@ process_tokenized_card_data(Data, IdempotentParams, Context) ->
         {exception, #'InvalidRequest'{}} ->
             throw({ok, logic_error(invalidRequest, <<"Tokenized card data is invalid">>)})
     end,
-    PutCardData = encode_tokenized_card_data(UnwrappedPaymentTool),
+    {CardData, ExtraCardData} = encode_tokenized_card_data(UnwrappedPaymentTool),
     SessionData = encode_tokenized_session_data(UnwrappedPaymentTool),
-    BankInfo = get_bank_info(PutCardData#cds_PutCardData.pan, Context),
+    BankInfo = get_bank_info(CardData#cds_CardData.pan, Context),
     PaymentSystem = capi_bankcard:payment_system(BankInfo),
-    case capi_bankcard:validate(PutCardData, SessionData, PaymentSystem) of
+    case capi_bankcard:validate(CardData, ExtraCardData, SessionData, PaymentSystem) of
         ok ->
-            Result = put_card_data_to_cds(PutCardData, SessionData, IdempotentParams, BankInfo, Context),
+            Result = put_card_data_to_cds(CardData, SessionData, IdempotentParams, BankInfo, Context),
             process_tokenized_card_data_result(Result, UnwrappedPaymentTool);
         {error, Error} ->
             throw({ok, validation_error(Error)})
@@ -369,13 +372,14 @@ encode_tokenized_card_data(#paytoolprv_UnwrappedPaymentTool{
         cardholder_name = CardholderName
     }
 }) ->
-    #cds_PutCardData{
-        pan  = DPAN,
-        exp_date = #cds_ExpDate{
-            month = Month,
-            year = Year
+    {
+        #cds_CardData{
+            pan = DPAN
         },
-        cardholder_name = CardholderName
+        genlib_map:compact(#{
+            cardholder => CardholderName,
+            exp_date => {Month, Year}
+        })
     };
 encode_tokenized_card_data(#paytoolprv_UnwrappedPaymentTool{
     payment_data = {card, #paytoolprv_Card{
@@ -389,13 +393,14 @@ encode_tokenized_card_data(#paytoolprv_UnwrappedPaymentTool{
         cardholder_name = CardholderName
     }
 }) ->
-    #cds_PutCardData{
-        pan  = PAN,
-        exp_date = #cds_ExpDate{
-            month = Month,
-            year = Year
+    {
+        #cds_CardData{
+            pan = PAN
         },
-        cardholder_name = CardholderName
+        genlib_map:compact(#{
+            cardholder => CardholderName,
+            exp_date => {Month, Year}
+        })
     }.
 
 encode_tokenized_session_data(#paytoolprv_UnwrappedPaymentTool{
