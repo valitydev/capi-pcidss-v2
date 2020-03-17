@@ -26,6 +26,7 @@
 
 -export([
     create_visa_payment_resource_ok_test/1,
+    create_payment_resource_invalid_cardholder_test/1,
     create_visa_with_empty_cvv_ok_test/1,
     create_visa_with_wrong_cvv_test/1,
     create_visa_with_wrong_cardnumber_test/1,
@@ -97,6 +98,7 @@ groups() ->
         {payment_resources, [],
             [
                 create_visa_payment_resource_ok_test,
+                create_payment_resource_invalid_cardholder_test,
                 create_visa_with_empty_cvv_ok_test,
                 create_visa_with_wrong_cvv_test,
                 create_visa_with_wrong_cardnumber_test,
@@ -216,6 +218,52 @@ create_visa_payment_resource_ok_test(Config) ->
         },
         <<"clientInfo">> => ClientInfo
     }).
+
+-spec create_payment_resource_invalid_cardholder_test(_) ->
+    _.
+create_payment_resource_invalid_cardholder_test(Config) ->
+    capi_ct_helper:mock_services([
+        {cds_storage, fun
+            ('PutSession', _) -> {ok, ok};
+            ('PutCard', [
+                #cds_CardData{pan = <<"411111", _:6/binary, Mask:4/binary>>}
+            ]) ->
+                {ok, #cds_PutCardResult{
+                    bank_card = #cds_BankCard{
+                        token = ?STRING,
+                        bin = <<"411111">>,
+                        last_digits = Mask
+                    }
+                }}
+        end},
+        {bender, fun('GenerateID', _) -> {ok, capi_ct_helper_bender:get_result(<<"bender_key">>)} end},
+        {binbase, fun('Lookup', _) -> {ok, ?BINBASE_LOOKUP_RESULT(<<"VISA">>)} end}
+    ], Config),
+    ClientInfo = #{<<"fingerprint">> => <<"test fingerprint">>},
+    PaymentTool = #{
+        <<"paymentToolType">> => <<"CardData">>,
+        <<"cardNumber">> => <<"4111111111111111">>,
+        <<"expDate">> => <<"08/27">>,
+        <<"cvv">> => <<"232">>
+    },
+    {ok, _ } = capi_client_tokens:create_payment_resource(?config(context, Config),
+        #{
+            <<"paymentTool">> => PaymentTool#{<<"cardHolder">> => <<"Вася Иванов"/utf8>>},
+            <<"clientInfo">> => ClientInfo
+        }
+    ),
+    {error, {request_validation_failed, _}} = capi_client_tokens:create_payment_resource(?config(context, Config),
+        #{
+            <<"paymentTool">> => PaymentTool#{<<"cardHolder">> => <<"4111111111111111">>},
+            <<"clientInfo">> => ClientInfo
+        }
+    ),
+    {error, {request_validation_failed, _}} = capi_client_tokens:create_payment_resource(?config(context, Config),
+        #{
+            <<"paymentTool">> => PaymentTool#{<<"cardHolder">> => <<"Вася123"/utf8>>},
+            <<"clientInfo">> => ClientInfo
+        }
+    ).
 
 -spec create_visa_with_empty_cvv_ok_test(_) ->
     _.
