@@ -145,7 +145,7 @@ encode_card_data(CardData) ->
             pan = CardNumber,
             %% TODO Remove after migration
             exp_date = encode_cds_exp_date(ExpDate),
-            cardholder_name = CardNumber
+            cardholder_name = Cardholder
         },
         genlib_map:compact(#{
             cardholder => Cardholder,
