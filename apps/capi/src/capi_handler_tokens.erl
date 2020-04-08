@@ -93,7 +93,7 @@ validate_ip(IP) ->
 process_card_data(Data, IdempotentParams, Context) ->
     SessionData = encode_session_data(Data),
     {CardData, ExtraCardData} = encode_card_data(Data),
-    BankInfo = get_bank_info(CardData#'cds_CardData'.pan, Context),
+    BankInfo = get_bank_info(CardData#'cds_PutCardData'.pan, Context),
     PaymentSystem = capi_bankcard:payment_system(BankInfo),
     case capi_bankcard:validate(CardData, ExtraCardData, SessionData, PaymentSystem) of
         ok ->
@@ -105,7 +105,7 @@ process_card_data(Data, IdempotentParams, Context) ->
 
 process_card_data_result(
     {{bank_card, BankCard}, SessionID},
-    #cds_CardData{
+    #cds_PutCardData{
         pan  = CardNumber
     },
     ExtraCardData
@@ -141,11 +141,8 @@ encode_card_data(CardData) ->
     ExpDate = parse_exp_date(genlib_map:get(<<"expDate">>, CardData)),
     Cardholder = genlib_map:get(<<"cardHolder">>, CardData),
     {
-        #cds_CardData{
-            pan = CardNumber,
-            %% TODO Remove after migration
-            exp_date = encode_cds_exp_date(ExpDate),
-            cardholder_name = Cardholder
+        #cds_PutCardData{
+            pan = CardNumber
         },
         genlib_map:compact(#{
             cardholder => Cardholder,
@@ -164,14 +161,6 @@ parse_exp_date(ExpDate) when is_binary(ExpDate) ->
             Y
     end,
     {genlib:to_int(Month), Year}.
-
-encode_cds_exp_date(undefined) ->
-    undefined;
-encode_cds_exp_date({Month, Year}) ->
-    #cds_ExpDate{
-        month = Month,
-        year = Year
-    }.
 
 put_card_data_to_cds(CardData, SessionData, {ExternalID, IdempotentKey}, BankInfo, Context) ->
     #{woody_context := WoodyCtx} = Context,
@@ -281,7 +270,7 @@ process_tokenized_card_data(Data, IdempotentParams, Context) ->
     end,
     {CardData, ExtraCardData} = encode_tokenized_card_data(UnwrappedPaymentTool),
     SessionData = encode_tokenized_session_data(UnwrappedPaymentTool),
-    BankInfo = get_bank_info(CardData#cds_CardData.pan, Context),
+    BankInfo = get_bank_info(CardData#cds_PutCardData.pan, Context),
     PaymentSystem = capi_bankcard:payment_system(BankInfo),
     case capi_bankcard:validate(CardData, ExtraCardData, SessionData, PaymentSystem) of
         ok ->
@@ -395,11 +384,8 @@ encode_tokenized_card_data(#paytoolprv_UnwrappedPaymentTool{
 }) ->
     ExpDate = {Month, Year},
     {
-        #cds_CardData{
-            pan = DPAN,
-            %% TODO Remove after migration
-            exp_date = encode_cds_exp_date(ExpDate),
-            cardholder_name = CardholderName
+        #cds_PutCardData{
+            pan = DPAN
         },
         genlib_map:compact(#{
             cardholder => CardholderName,
@@ -420,11 +406,8 @@ encode_tokenized_card_data(#paytoolprv_UnwrappedPaymentTool{
 }) ->
     ExpDate = {Month, Year},
     {
-        #cds_CardData{
-            pan = PAN,
-            %% TODO Remove after migration
-            exp_date = encode_cds_exp_date(ExpDate),
-            cardholder_name = CardholderName
+        #cds_PutCardData{
+            pan = PAN
         },
         genlib_map:compact(#{
             cardholder => CardholderName,
