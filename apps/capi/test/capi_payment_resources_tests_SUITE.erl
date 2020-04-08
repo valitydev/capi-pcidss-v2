@@ -723,7 +723,9 @@ create_googlepay_plain_payment_resource_ok_test(Config) ->
         }
     ], Config),
     ClientInfo = #{<<"fingerprint">> => <<"test fingerprint">>},
-    {ok, #{<<"paymentToolDetails">> := Details = #{
+    {ok, #{
+        <<"paymentToolToken">> := PaymentToolToken,
+        <<"paymentToolDetails">> := Details = #{
         <<"paymentSystem">> := <<"mastercard">>,
         <<"cardNumberMask">> := <<"532130******7892">>,
         <<"first6">> := <<"532130">>,
@@ -738,7 +740,13 @@ create_googlepay_plain_payment_resource_ok_test(Config) ->
             },
             <<"clientInfo">> => ClientInfo
         }),
-    false = maps:is_key(<<"tokenProvider">>, Details).
+    false = maps:is_key(<<"tokenProvider">>, Details),
+    %% is_cvv_empty = true for GooglePay tokenized plain bank card
+    %% see capi_handler_tokens:set_is_empty_cvv/2 for more info
+    {ok, {bank_card_payload, #ptt_BankCardPayload{
+        bank_card = #domain_BankCard{is_cvv_empty = true}
+    }}}
+        = capi_crypto:decrypt_payment_tool_token(PaymentToolToken).
 
 %%
 

@@ -333,14 +333,14 @@ process_tokenized_card_data_result(
         details = PaymentDetails
     }
 ) ->
+    TokenProvider = get_payment_token_provider(PaymentDetails, PaymentData),
     {
         {bank_card, BankCard#domain_BankCard{
             bin            = get_tokenized_bin(PaymentData),
             payment_system = PaymentSystem,
             last_digits    = get_tokenized_pan(Last4, PaymentData),
-            token_provider = get_payment_token_provider(PaymentDetails, PaymentData),
-            %% Не учитываем наличие cvv для токенизированных карт, даже если проводим их как обычные.
-            is_cvv_empty   = undefined
+            token_provider = TokenProvider,
+            is_cvv_empty   = set_is_empty_cvv(TokenProvider, BankCard)
         }},
         SessionID
     }.
@@ -356,6 +356,16 @@ get_tokenized_pan(_Last4, {card, #paytoolprv_Card{pan = PAN}}) ->
     get_last4(PAN);
 get_tokenized_pan(Last4, _PaymentData) when Last4 =/= undefined ->
     Last4.
+
+% Do not drop is_cvv_empty flag for tokenized bank cards which looks like
+% simple bank card. This prevent wrong routing decisions in hellgate
+% when cvv is empty, but is_cvv_empty = undefined, which forces routing to bypass
+% restrictions and crash adapter. This situation is
+% only applicable for GooglePay with tokenized bank card via browser.
+set_is_empty_cvv(undefined, BankCard) ->
+    BankCard#domain_BankCard.is_cvv_empty;
+set_is_empty_cvv(_, _) ->
+    undefined.
 
 get_payment_token_provider(_PaymentDetails, {card, _}) ->
     % TODO
