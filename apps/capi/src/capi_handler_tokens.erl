@@ -275,7 +275,7 @@ process_tokenized_card_data(Data, IdempotentParams, Context) ->
     case capi_bankcard:validate(CardData, ExtraCardData, SessionData, PaymentSystem) of
         ok ->
             Result = put_card_data_to_cds(CardData, SessionData, IdempotentParams, BankInfo, Context),
-            process_tokenized_card_data_result(Result, UnwrappedPaymentTool);
+            process_tokenized_card_data_result(Result, ExtraCardData, UnwrappedPaymentTool);
         {error, Error} ->
             throw({ok, validation_error(Error)})
     end.
@@ -313,6 +313,7 @@ encode_payment_request(#{<<"provider" >> := <<"SamsungPay">>} = Data) ->
 
 process_tokenized_card_data_result(
     {{bank_card, BankCard}, SessionID},
+    ExtraCardData,
     #paytoolprv_UnwrappedPaymentTool{
         card_info = #paytoolprv_CardInfo{
             payment_system = PaymentSystem,
@@ -329,7 +330,9 @@ process_tokenized_card_data_result(
             payment_system = PaymentSystem,
             last_digits    = get_tokenized_pan(Last4, PaymentData),
             token_provider = TokenProvider,
-            is_cvv_empty   = set_is_empty_cvv(TokenProvider, BankCard)
+            is_cvv_empty   = set_is_empty_cvv(TokenProvider, BankCard),
+            exp_date = encode_exp_date(genlib_map:get(exp_date, ExtraCardData)),
+            cardholder_name = genlib_map:get(cardholder, ExtraCardData)
         }},
         SessionID
     }.
