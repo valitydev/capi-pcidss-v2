@@ -25,6 +25,7 @@
 -export([init/1]).
 
 -export([
+    expiration_date_fail_test/1,
     create_visa_payment_resource_ok_test/1,
     create_payment_resource_invalid_cardholder_test/1,
     create_visa_with_empty_cvv_ok_test/1,
@@ -97,6 +98,7 @@ groups() ->
     [
         {payment_resources, [],
             [
+                expiration_date_fail_test,
                 create_visa_payment_resource_ok_test,
                 create_payment_resource_invalid_cardholder_test,
                 create_visa_with_empty_cvv_ok_test,
@@ -213,11 +215,48 @@ create_visa_payment_resource_ok_test(Config) ->
             <<"paymentToolType">> => <<"CardData">>,
             <<"cardNumber">> => <<"4111111111111111">>,
             <<"cardHolder">> => <<"Alexander Weinerschnitzel">>,
-            <<"expDate">> => <<"08/27">>,
+            <<"expDate">> => <<"03/20">>,
             <<"cvv">> => <<"232">>
         },
         <<"clientInfo">> => ClientInfo
     }).
+
+-spec expiration_date_fail_test(_) ->
+    _.
+expiration_date_fail_test(Config) ->
+    capi_ct_helper:mock_services([
+        {cds_storage, fun
+            ('PutSession', _) -> {ok, ok};
+            ('PutCard', [
+                #'cds_PutCardData'{pan = <<"411111", _:6/binary, Mask:4/binary>>}
+            ]) ->
+                {ok, #'cds_PutCardResult'{
+                    bank_card = #cds_BankCard{
+                        token = ?STRING,
+                        bin = <<"411111">>,
+                        last_digits = Mask
+                    }
+                }}
+        end},
+        {bender, fun('GenerateID', _) -> {ok, capi_ct_helper_bender:get_result(<<"bender_key">>)} end},
+        {binbase, fun('Lookup', _) -> {ok, ?BINBASE_LOOKUP_RESULT(<<"VISA">>)} end}
+    ], Config),
+    ClientInfo = #{<<"fingerprint">> => <<"test fingerprint">>},
+    CardHolder = <<"Alexander Weinerschnitzel">>,
+    {error, {400, #{
+        <<"code">>    := <<"invalidRequest">>,
+        <<"message">> := <<"Invalid expiration date">>
+    }}} = capi_client_tokens:create_payment_resource(?config(context, Config), #{
+        <<"paymentTool">> => #{
+            <<"paymentToolType">> => <<"CardData">>,
+            <<"cardNumber">> => <<"4111111111111111">>,
+            <<"cardHolder">> => CardHolder,
+            <<"expDate">> => <<"02/20">>,
+            <<"cvv">> => <<"232">>
+        },
+        <<"clientInfo">> => ClientInfo
+    }).
+
 
 -spec create_payment_resource_invalid_cardholder_test(_) ->
     _.
