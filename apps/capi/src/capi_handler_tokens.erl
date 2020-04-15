@@ -95,7 +95,8 @@ process_card_data(Data, IdempotentParams, Context) ->
     {CardData, ExtraCardData} = encode_card_data(Data),
     BankInfo = get_bank_info(CardData#'cds_PutCardData'.pan, Context),
     PaymentSystem = capi_bankcard:payment_system(BankInfo),
-    case capi_bankcard:validate(CardData, ExtraCardData, SessionData, PaymentSystem) of
+    ValidationEnv = capi_bankcard:validation_env(),
+    case capi_bankcard:validate(CardData, ExtraCardData, SessionData, PaymentSystem, ValidationEnv) of
         ok ->
             Result = put_card_data_to_cds(CardData, SessionData, IdempotentParams, BankInfo, Context),
             process_card_data_result(Result, CardData, ExtraCardData);
@@ -272,7 +273,8 @@ process_tokenized_card_data(Data, IdempotentParams, Context) ->
     SessionData = encode_tokenized_session_data(UnwrappedPaymentTool),
     BankInfo = get_bank_info(CardData#cds_PutCardData.pan, Context),
     PaymentSystem = capi_bankcard:payment_system(BankInfo),
-    case capi_bankcard:validate(CardData, ExtraCardData, SessionData, PaymentSystem) of
+    ValidationEnv = capi_bankcard:validation_env(),
+    case capi_bankcard:validate(CardData, ExtraCardData, SessionData, PaymentSystem, ValidationEnv) of
         ok ->
             Result = put_card_data_to_cds(CardData, SessionData, IdempotentParams, BankInfo, Context),
             process_tokenized_card_data_result(Result, ExtraCardData, UnwrappedPaymentTool);

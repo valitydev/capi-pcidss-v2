@@ -99,6 +99,9 @@ start_capi(Config, ExtraEnv) ->
         {lechiffre_opts,  #{
             encryption_key_path => JwkPath,
             decryption_key_paths => [JwkPath]
+        }},
+        {validation, #{
+            now => {{2020, 3, 1}, {0, 0, 0}}
         }}
     ],
     start_app(capi_pcidss, CapiEnv).
