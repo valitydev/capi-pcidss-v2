@@ -14,7 +14,6 @@
         lechiffre,
         moneypenny,
         snowflake,
-        rfc3339,
         base64url,
         capi_woody_client,
         how_are_you,  % must be after ranch and before any woody usage

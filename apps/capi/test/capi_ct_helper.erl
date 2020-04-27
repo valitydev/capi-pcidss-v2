@@ -88,12 +88,6 @@ start_capi(Config, ExtraEnv) ->
                 keyset => #{
                     capi_pcidss => {pem_file, get_keysource("keys/local/private.pem", Config)}
                 }
-            },
-            access => #{
-                service_name => <<"common-api">>,
-                resource_hierarchy => #{
-                    payment_resources   => #{}
-                }
             }
         }},
         {lechiffre_opts,  #{
@@ -128,13 +122,18 @@ issue_token(PartyID, ACL, LifeTime) ->
     binary() | no_return().
 
 issue_token(PartyID, ACL, LifeTime, ExtraProperties) ->
-    Claims = maps:merge(#{?STRING => ?STRING}, ExtraProperties),
+    Claims = maps:merge(#{
+        ?STRING => ?STRING,
+        <<"exp">> => LifeTime,
+        <<"resource_access">> => #{
+            <<"common-api">> => uac_acl:from_list(ACL)
+            }
+    }, ExtraProperties),
     UniqueId = get_unique_id(),
     genlib:unwrap(
         uac_authorizer_jwt:issue(
             UniqueId,
-            LifeTime,
-            {PartyID, uac_acl:from_list(ACL)},
+            PartyID,
             Claims,
             capi_pcidss
         )

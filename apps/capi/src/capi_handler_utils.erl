@@ -87,7 +87,7 @@ server_error(Code) when Code >= 500 andalso Code < 600 ->
     binary().
 
 get_party_id(Context) ->
-    capi_auth:get_subject_id(get_auth_context(Context)).
+    uac_authorizer_jwt:get_subject_id(get_auth_context(Context)).
 
 %%%
 
@@ -107,7 +107,7 @@ get_auth_context(#{swagger_context := #{auth_context := AuthContext}}) ->
     map().
 
 get_extra_properties(Context) ->
-    capi_auth:get_claims(get_auth_context(Context)).
+    uac_authorizer_jwt:get_claims(get_auth_context(Context)).
 
 %% Utils
 
