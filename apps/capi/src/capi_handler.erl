@@ -29,6 +29,7 @@
 
 %% @WARNING Must be refactored in case of different classes of users using this API
 -define(REALM, <<"external">>).
+-define(DOMAIN, <<"common-api">>).
 
 -define(SWAG_HANDLER_SCOPE, swag_handler).
 
@@ -65,7 +66,9 @@ get_handlers() ->
     ].
 
 get_verification_options() ->
-    #{}.
+    #{
+        domains_to_decode => [?DOMAIN]
+    }.
 
 -spec handle_request(
     OperationID :: operation_id(),
