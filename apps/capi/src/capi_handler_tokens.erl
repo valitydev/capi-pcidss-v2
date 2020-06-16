@@ -190,6 +190,7 @@ expand_card_info(BankCard, #{
     payment_system  := PaymentSystem,
     bank_name       := BankName,
     issuer_country  := IssuerCountry,
+    category        := Category,
     metadata        := Metadata
 }, HaveCVV) ->
     #domain_BankCard{
@@ -198,6 +199,7 @@ expand_card_info(BankCard, #{
         last_digits     = BankCard#cds_BankCard.last_digits,
         payment_system  = PaymentSystem,
         issuer_country  = IssuerCountry,
+        category        = Category,
         bank_name       = BankName,
         metadata        = #{?CAPI_NS => capi_msgp_marshalling:marshal(Metadata)},
         is_cvv_empty    = HaveCVV
