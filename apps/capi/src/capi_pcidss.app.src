@@ -22,6 +22,7 @@
         swag_server,
         woody_user_identity,
         cowboy_cors,
+        cowboy_draining_server,
         cowboy_access_log,
         erl_health,
         uac,
