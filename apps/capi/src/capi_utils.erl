@@ -7,7 +7,8 @@
 
 -export([to_universal_time/1]).
 
--define(MAX_REQUEST_DEADLINE_TIME, timer:minutes(1)). % 1 min
+% 1 min
+-define(MAX_REQUEST_DEADLINE_TIME, timer:minutes(1)).
 
 -spec base64url_to_map(binary()) -> map() | no_return().
 base64url_to_map(Base64) when is_binary(Base64) ->
@@ -33,6 +34,7 @@ parse_deadline(DeadlineStr) ->
         fun try_parse_relative/1
     ],
     try_parse_deadline(DeadlineStr, Parsers).
+
 %%
 %% Internals
 %%
@@ -45,6 +47,7 @@ try_parse_deadline(DeadlineStr, [P | Parsers]) ->
         {error, bad_deadline} ->
             try_parse_deadline(DeadlineStr, Parsers)
     end.
+
 try_parse_woody_default(DeadlineStr) ->
     try
         Deadline = woody_deadline:from_binary(to_universal_time(DeadlineStr)),
@@ -59,6 +62,7 @@ try_parse_woody_default(DeadlineStr) ->
         error:deadline_reached ->
             {error, bad_deadline}
     end.
+
 try_parse_relative(DeadlineStr) ->
     %% deadline string like '1ms', '30m', '2.6h' etc
     case re:split(DeadlineStr, <<"^(\\d+\\.\\d+|\\d+)([a-z]+)$">>) of
@@ -68,6 +72,7 @@ try_parse_relative(DeadlineStr) ->
         _Other ->
             {error, bad_deadline}
     end.
+
 try_parse_relative(Number, Unit) ->
     case unit_factor(Unit) of
         {ok, Factor} ->
@@ -76,6 +81,7 @@ try_parse_relative(Number, Unit) ->
         {error, _Reason} ->
             {error, bad_deadline}
     end.
+
 unit_factor(<<"ms">>) ->
     {ok, 1};
 unit_factor(<<"s">>) ->
@@ -85,7 +91,7 @@ unit_factor(<<"m">>) ->
 unit_factor(_Other) ->
     {error, unknown_unit}.
 
-clamp_max_request_deadline(Value) when is_integer(Value)->
+clamp_max_request_deadline(Value) when is_integer(Value) ->
     MaxDeadline = genlib_app:env(capi_pcidss, max_request_deadline, ?MAX_REQUEST_DEADLINE_TIME),
     case Value > MaxDeadline of
         true ->
@@ -102,8 +108,9 @@ clamp_max_request_deadline(Value) when is_integer(Value)->
 -spec test() -> _.
 
 -spec to_universal_time_test() -> _.
+
 to_universal_time_test() ->
-    ?assertEqual(<<"2017-04-19T13:56:07Z">>,        to_universal_time(<<"2017-04-19T13:56:07Z">>)),
+    ?assertEqual(<<"2017-04-19T13:56:07Z">>, to_universal_time(<<"2017-04-19T13:56:07Z">>)),
     ?assertEqual(<<"2017-04-19T13:56:07.530Z">>, to_universal_time(<<"2017-04-19T13:56:07.53Z">>)),
     ?assertEqual(<<"2017-04-19T10:36:07.530Z">>, to_universal_time(<<"2017-04-19T13:56:07.53+03:20">>)),
     ?assertEqual(<<"2017-04-19T17:16:07.530Z">>, to_universal_time(<<"2017-04-19T13:56:07.53-03:20">>)).

@@ -13,7 +13,7 @@
 -export_type([decode_data/0]).
 
 -type encrypted_token() :: capi_crypto:encrypted_token().
--type decode_data()     :: #{binary() => term()}.
+-type decode_data() :: #{binary() => term()}.
 
 decode_payment_tool_details({bank_card, V}) ->
     decode_bank_card_details(V, #{<<"detailsType">> => <<"PaymentToolDetailsBankCard">>});
@@ -40,11 +40,11 @@ decode_bank_card_details(BankCard, V) ->
     LastDigits = decode_last_digits(BankCard#domain_BankCard.last_digits),
     Bin = get_bank_card_bin(BankCard#domain_BankCard.bin),
     capi_handler_utils:merge_and_compact(V, #{
-        <<"last4">>          => LastDigits,
-        <<"first6">>         => Bin,
+        <<"last4">> => LastDigits,
+        <<"first6">> => Bin,
         <<"cardNumberMask">> => decode_masked_pan(Bin, LastDigits),
-        <<"paymentSystem" >> => genlib:to_binary(BankCard#domain_BankCard.payment_system),
-        <<"tokenProvider" >> => decode_token_provider(BankCard#domain_BankCard.token_provider)
+        <<"paymentSystem">> => genlib:to_binary(BankCard#domain_BankCard.payment_system),
+        <<"tokenProvider">> => decode_token_provider(BankCard#domain_BankCard.token_provider)
     }).
 
 get_bank_card_bin(<<>>) ->
@@ -65,23 +65,21 @@ decode_payment_terminal_details(#domain_PaymentTerminal{terminal_type = Type}, V
 decode_digital_wallet_details(#domain_DigitalWallet{provider = qiwi, id = ID}, V) ->
     V#{
         <<"digitalWalletDetailsType">> => <<"DigitalWalletDetailsQIWI">>,
-        <<"phoneNumberMask"         >> => mask_phone_number(ID)
+        <<"phoneNumberMask">> => mask_phone_number(ID)
     }.
 
 mask_phone_number(PhoneNumber) ->
     genlib_string:redact(PhoneNumber, <<"^\\+\\d(\\d{1,10}?)\\d{2,4}$">>).
 
--spec decode_disposable_payment_resource(capi_handler_encoder:encode_data(), encrypted_token()) ->
-    decode_data().
-
+-spec decode_disposable_payment_resource(capi_handler_encoder:encode_data(), encrypted_token()) -> decode_data().
 decode_disposable_payment_resource(Resource, EncryptedToken) ->
     #domain_DisposablePaymentResource{payment_tool = PaymentTool, payment_session_id = SessionID} = Resource,
     ClientInfo = decode_client_info(Resource#domain_DisposablePaymentResource.client_info),
     #{
-        <<"paymentToolToken"  >> => EncryptedToken,
-        <<"paymentSession"    >> => capi_handler_utils:wrap_payment_session(ClientInfo, SessionID),
+        <<"paymentToolToken">> => EncryptedToken,
+        <<"paymentSession">> => capi_handler_utils:wrap_payment_session(ClientInfo, SessionID),
         <<"paymentToolDetails">> => decode_payment_tool_details(PaymentTool),
-        <<"clientInfo"        >> => ClientInfo
+        <<"clientInfo">> => ClientInfo
     }.
 
 decode_client_info(undefined) ->
@@ -89,16 +87,14 @@ decode_client_info(undefined) ->
 decode_client_info(ClientInfo) ->
     #{
         <<"fingerprint">> => ClientInfo#domain_ClientInfo.fingerprint,
-        <<"ip"         >> => ClientInfo#domain_ClientInfo.ip_address
+        <<"ip">> => ClientInfo#domain_ClientInfo.ip_address
     }.
 
 %%
 
 -define(PAN_LENGTH, 16).
 
--spec decode_masked_pan(binary() | undefined, binary()) ->
-    binary().
-
+-spec decode_masked_pan(binary() | undefined, binary()) -> binary().
 decode_masked_pan(undefined, LastDigits) ->
     decode_masked_pan(<<>>, LastDigits);
 decode_masked_pan(Bin, LastDigits) ->
@@ -107,23 +103,19 @@ decode_masked_pan(Bin, LastDigits) ->
 
 -define(MASKED_PAN_MAX_LENGTH, 4).
 
--spec decode_last_digits(binary()) ->
-    binary().
-
+-spec decode_last_digits(binary()) -> binary().
 decode_last_digits(MaskedPan) when byte_size(MaskedPan) > ?MASKED_PAN_MAX_LENGTH ->
     binary:part(MaskedPan, {byte_size(MaskedPan), -?MASKED_PAN_MAX_LENGTH});
 decode_last_digits(MaskedPan) ->
     MaskedPan.
 
 -spec convert_crypto_currency_from_swag(binary()) -> atom().
-
 convert_crypto_currency_from_swag(<<"bitcoinCash">>) ->
     bitcoin_cash;
 convert_crypto_currency_from_swag(CryptoCurrency) when is_binary(CryptoCurrency) ->
     binary_to_existing_atom(CryptoCurrency, utf8).
 
 -spec convert_crypto_currency_to_swag(atom()) -> binary().
-
 convert_crypto_currency_to_swag(bitcoin_cash) ->
     <<"bitcoinCash">>;
 convert_crypto_currency_to_swag(CryptoCurrency) when is_atom(CryptoCurrency) ->

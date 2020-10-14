@@ -6,9 +6,7 @@
     get_result/0
 ]).
 
--spec get_result() ->
-    _.
-
+-spec get_result() -> _.
 get_result() ->
     #mnp_ResponseData{
         operator = megafone
