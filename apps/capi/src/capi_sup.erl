@@ -24,14 +24,20 @@ init([]) ->
     LechiffreOpts = genlib_app:env(capi_pcidss, lechiffre_opts),
     LechiffreSpec = lechiffre:child_spec(lechiffre, LechiffreOpts),
     {LogicHandler, LogicHandlerSpecs} = get_logic_handler_info(),
-    HealthRoutes = [{'_', [erl_health_handle:get_route(genlib_app:env(capi_pcidss, health_checkers, []))]}],
-    SwaggerSpec = capi_swagger_server:child_spec({HealthRoutes, LogicHandler}),
+    AdditionalRoutes = [
+        {'_', [get_prometheus_route(), erl_health_handle:get_route(genlib_app:env(capi_pcidss, health_checkers, []))]}
+    ],
+    SwaggerSpec = capi_swagger_server:child_spec({AdditionalRoutes, LogicHandler}),
     UacConf = get_uac_config(),
     ok = uac:configure(UacConf),
     {ok, {
         {one_for_all, 0, 1},
         [LechiffreSpec] ++ LogicHandlerSpecs ++ [SwaggerSpec]
     }}.
+
+-spec get_prometheus_route() -> {iodata(), module(), _Opts :: any()}.
+get_prometheus_route() ->
+    {"/metrics/[:registry]", prometheus_cowboy2_handler, []}.
 
 -spec get_logic_handler_info() -> {Handler :: atom(), [Spec :: supervisor:child_spec()] | []}.
 get_logic_handler_info() ->
