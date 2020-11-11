@@ -13,6 +13,7 @@
 -import(capi_handler_utils, [logic_error/2, validation_error/1]).
 
 -define(CAPI_NS, <<"com.rbkmoney.capi">>).
+-define(DEFAULT_PAYMENT_TOOL_TOKEN_LIFETIME, <<"64m">>).
 
 -spec process_request(
     OperationID :: capi_handler:operation_id(),
@@ -49,8 +50,15 @@ process_request('CreatePaymentResource' = OperationID, Req, Context) ->
             payment_session_id = PaymentSessionID,
             client_info = capi_handler_encoder:encode_client_info(ClientInfo)
         },
-        EncryptedToken = capi_crypto:create_encrypted_payment_tool_token(PaymentTool),
-        {ok, {201, #{}, capi_handler_decoder:decode_disposable_payment_resource(PaymentResource, EncryptedToken)}}
+        TokenValidUntil = capi_utils:deadline_from_timeout(payment_tool_token_lifetime()),
+        EncryptedToken = capi_crypto:create_encrypted_payment_tool_token(PaymentTool, TokenValidUntil),
+        {ok,
+            {201, #{},
+                capi_handler_decoder:decode_disposable_payment_resource(
+                    PaymentResource,
+                    EncryptedToken,
+                    TokenValidUntil
+                )}}
     catch
         Result -> Result
     end;
@@ -58,6 +66,22 @@ process_request('CreatePaymentResource' = OperationID, Req, Context) ->
 
 process_request(_OperationID, _Req, _Context) ->
     {error, noimpl}.
+
+%%
+
+-spec payment_tool_token_lifetime() -> timeout().
+payment_tool_token_lifetime() ->
+    case genlib_app:env(capi_pcidss, payment_tool_token_lifetime, ?DEFAULT_PAYMENT_TOOL_TOKEN_LIFETIME) of
+        Value when is_integer(Value) ->
+            Value;
+        Value ->
+            case capi_utils:parse_lifetime(Value) of
+                {ok, Lifetime} ->
+                    Lifetime;
+                Error ->
+                    erlang:error(Error, [Value])
+            end
+    end.
 
 %%
 

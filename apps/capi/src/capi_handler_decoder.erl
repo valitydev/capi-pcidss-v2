@@ -2,7 +2,7 @@
 
 -include_lib("damsel/include/dmsl_domain_thrift.hrl").
 
--export([decode_disposable_payment_resource/2]).
+-export([decode_disposable_payment_resource/3]).
 
 -export([decode_last_digits/1]).
 -export([decode_masked_pan/2]).
@@ -71,16 +71,26 @@ decode_digital_wallet_details(#domain_DigitalWallet{provider = qiwi, id = ID}, V
 mask_phone_number(PhoneNumber) ->
     genlib_string:redact(PhoneNumber, <<"^\\+\\d(\\d{1,10}?)\\d{2,4}$">>).
 
--spec decode_disposable_payment_resource(capi_handler_encoder:encode_data(), encrypted_token()) -> decode_data().
-decode_disposable_payment_resource(Resource, EncryptedToken) ->
+-spec decode_disposable_payment_resource(
+    capi_handler_encoder:encode_data(),
+    encrypted_token(),
+    capi_utils:deadline()
+) -> decode_data().
+decode_disposable_payment_resource(Resource, EncryptedToken, TokenValidUntil) ->
     #domain_DisposablePaymentResource{payment_tool = PaymentTool, payment_session_id = SessionID} = Resource,
     ClientInfo = decode_client_info(Resource#domain_DisposablePaymentResource.client_info),
-    #{
+    genlib_map:compact(#{
         <<"paymentToolToken">> => EncryptedToken,
         <<"paymentSession">> => capi_handler_utils:wrap_payment_session(ClientInfo, SessionID),
         <<"paymentToolDetails">> => decode_payment_tool_details(PaymentTool),
-        <<"clientInfo">> => ClientInfo
-    }.
+        <<"clientInfo">> => ClientInfo,
+        <<"validUntil">> => decode_deadline(TokenValidUntil)
+    }).
+
+decode_deadline(undefined) ->
+    undefined;
+decode_deadline(Deadline) ->
+    capi_utils:deadline_to_binary(Deadline).
 
 decode_client_info(undefined) ->
     undefined;

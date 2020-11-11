@@ -89,7 +89,8 @@ start_capi(Config, ExtraEnv) ->
                 }},
                 {validation, #{
                     now => {{2020, 3, 1}, {0, 0, 0}}
-                }}
+                }},
+                {payment_tool_token_lifetime, <<"1024s">>}
             ],
     start_app(capi_pcidss, CapiEnv).
 

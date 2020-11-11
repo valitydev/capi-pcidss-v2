@@ -1,14 +1,44 @@
 -module(capi_utils).
 
+-type deadline() :: woody:deadline().
+
+-export_type([deadline/0]).
+
+-export([deadline_to_binary/1]).
+-export([deadline_from_binary/1]).
+-export([deadline_from_timeout/1]).
+-export([deadline_is_reached/1]).
+
 -export([base64url_to_map/1]).
 -export([map_to_base64url/1]).
 
 -export([parse_deadline/1]).
+-export([parse_lifetime/1]).
 
 -export([to_universal_time/1]).
 
 % 1 min
 -define(MAX_REQUEST_DEADLINE_TIME, timer:minutes(1)).
+
+-spec deadline_to_binary(deadline()) -> binary() | undefined.
+deadline_to_binary(undefined) ->
+    undefined;
+deadline_to_binary(Deadline) ->
+    woody_deadline:to_binary(Deadline).
+
+-spec deadline_from_binary(binary()) -> deadline() | undefined.
+deadline_from_binary(undefined) ->
+    undefined;
+deadline_from_binary(Binary) ->
+    woody_deadline:from_binary(Binary).
+
+-spec deadline_from_timeout(timeout()) -> deadline().
+deadline_from_timeout(Timeout) ->
+    woody_deadline:from_timeout(Timeout).
+
+-spec deadline_is_reached(deadline()) -> boolean().
+deadline_is_reached(Deadline) ->
+    woody_deadline:is_reached(Deadline).
 
 -spec base64url_to_map(binary()) -> map() | no_return().
 base64url_to_map(Base64) when is_binary(Base64) ->
@@ -34,6 +64,27 @@ parse_deadline(DeadlineStr) ->
         fun try_parse_relative/1
     ],
     try_parse_deadline(DeadlineStr, Parsers).
+
+-spec parse_lifetime(binary()) -> {ok, timeout()} | {error, bad_lifetime}.
+parse_lifetime(undefined) ->
+    {error, bad_lifetime};
+parse_lifetime(Bin) ->
+    %% lifetime string like '1ms', '30s', '2.6m' etc
+    %% default unit - millisecond
+    case re:split(Bin, <<"^(\\d+\\.\\d+|\\d+)([a-z]*)$">>) of
+        [<<>>, NumberStr, <<>>, <<>>] ->
+            {ok, genlib:to_int(NumberStr)};
+        [<<>>, NumberStr, Unit, <<>>] ->
+            Number = genlib:to_float(NumberStr),
+            case unit_factor(Unit) of
+                {ok, Factor} ->
+                    {ok, erlang:round(Number * Factor)};
+                {error, _Reason} ->
+                    {error, bad_lifetime}
+            end;
+        _Other ->
+            {error, bad_lifetime}
+    end.
 
 %%
 %% Internals
@@ -64,7 +115,7 @@ try_parse_woody_default(DeadlineStr) ->
     end.
 
 try_parse_relative(DeadlineStr) ->
-    %% deadline string like '1ms', '30m', '2.6h' etc
+    %% deadline string like '1ms', '30s', '2.6m' etc
     case re:split(DeadlineStr, <<"^(\\d+\\.\\d+|\\d+)([a-z]+)$">>) of
         [<<>>, NumberStr, Unit, <<>>] ->
             Number = genlib:to_float(NumberStr),
@@ -124,5 +175,12 @@ parse_deadline_test() ->
     {ok, {_, _}} = parse_deadline(<<"15s">>),
     {ok, {_, _}} = parse_deadline(<<"15m">>),
     {error, bad_deadline} = parse_deadline(<<"15h">>).
+
+-spec parse_lifetime_test() -> _.
+parse_lifetime_test() ->
+    {ok, 16 * 1000} = parse_lifetime(<<"16s">>),
+    {ok, 32 * 60 * 1000} = parse_lifetime(<<"32m">>),
+    {error, bad_lifetime} = parse_lifetime(undefined),
+    {error, bad_lifetime} = parse_lifetime(<<"64h">>).
 
 -endif.
