@@ -74,3 +74,10 @@
         message_expiration = ?TIMESTAMP
     }}
 ).
+
+-define(YANDEX_PAY_DETAILS,
+    {yandex, #paytoolprv_YandexPayDetails{
+        message_id = ?STRING,
+        message_expiration = ?TIMESTAMP
+    }}
+).
