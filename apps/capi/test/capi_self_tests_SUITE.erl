@@ -33,7 +33,7 @@
 init([]) ->
     {ok, {#{strategy => one_for_all, intensity => 1, period => 1}, []}}.
 
--spec all() -> [test_case_name()].
+-spec all() -> [{group, test_case_name()}].
 all() ->
     [
         {group, stream_handler_tests}
@@ -61,7 +61,7 @@ init_per_suite(Config) ->
 -spec end_per_suite(config()) -> _.
 end_per_suite(C) ->
     _ = capi_ct_helper:stop_mocked_service_sup(?config(suite_test_sup, C)),
-    [application:stop(App) || App <- proplists:get_value(apps, C)],
+    _ = [application:stop(App) || App <- proplists:get_value(apps, C)],
     ok.
 
 -spec init_per_group(group_name(), config()) -> config().
@@ -83,13 +83,13 @@ init_per_testcase(_Name, C) ->
 -spec end_per_testcase(test_case_name(), config()) -> config().
 end_per_testcase(_Name, C) ->
     capi_ct_helper:stop_mocked_service_sup(?config(test_sup, C)),
-    ok.
+    proplists:delete(test_sup, C).
 
 %%% Tests
 
 -spec oops_body_test(config()) -> _.
 oops_body_test(Config) ->
-    capi_ct_helper:mock_services(
+    _ = capi_ct_helper:mock_services(
         [
             {cds_storage, fun
                 ('PutSession', _) -> {ok, ok};
@@ -110,10 +110,16 @@ oops_body_test(Config) ->
             {<<"Content-Type">>, <<"application/json; charset=UTF-8">>},
             {<<"X-Request-ID">>, list_to_binary(integer_to_list(rand:uniform(100000)))}
         ],
-        <<"{\"paymentTool\":\n"
-            "                {\"paymentToolType\":\"CardData\",\"cardNumber\":\"4242424242424242\",\"expDate\":\"12/20\"},\n"
-            "            \"clientInfo\":\n"
-            "                {\"fingerprint\":\"test\"}}">>,
+        <<
+            "{"
+            " \"paymentTool\":\n"
+            "   {\"paymentToolType\":\"CardData\","
+            "   \"cardNumber\":\"4242424242424242\","
+            "   \"expDate\":\"12/20\""
+            "   },\n"
+            " \"clientInfo\": {\"fingerprint\":\"test\"}"
+            "}"
+        >>,
         [
             with_body
         ]

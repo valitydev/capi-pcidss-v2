@@ -204,7 +204,7 @@ put_card_data_to_cds(CardData, SessionData, {ExternalID, IdempotentKey}, BankInf
     end.
 
 put_card_to_cds(CardData, SessionData, BankInfo, Context) ->
-    Call = {cds_storage, 'PutCard', [CardData]},
+    Call = {cds_storage, 'PutCard', {CardData}},
     case capi_handler_utils:service_call(Call, Context) of
         {ok, #cds_PutCardResult{bank_card = BankCard}} ->
             {bank_card, expand_card_info(BankCard, BankInfo, undef_cvv(SessionData))};
@@ -257,7 +257,7 @@ gen_random_id() ->
     genlib_format:format_int_base(binary:decode_unsigned(Random), 62).
 
 put_session_to_cds(SessionID, SessionData, Context) ->
-    Call = {cds_storage, 'PutSession', [SessionID, SessionData]},
+    Call = {cds_storage, 'PutSession', {SessionID, SessionData}},
     {ok, ok} = capi_handler_utils:service_call(Call, Context),
     ok.
 
@@ -289,14 +289,14 @@ maybe_store_token_in_tds(#{<<"accessToken">> := TokenContent}, IdempotentParams,
     RandomID = gen_random_id(),
     Hash = undefined,
     {ok, TokenID} = capi_bender:gen_by_constant(IdempotentKey, RandomID, Hash, WoodyCtx),
-    Call = {tds_storage, 'PutToken', [TokenID, Token]},
+    Call = {tds_storage, 'PutToken', {TokenID, Token}},
     {ok, ok} = capi_handler_utils:service_call(Call, Context),
     TokenID;
 maybe_store_token_in_tds(_, _IdempotentParams, _Context) ->
     undefined.
 
 process_tokenized_card_data(Data, IdempotentParams, Context) ->
-    Call = {get_token_provider_service_name(Data), 'Unwrap', [encode_wrapped_payment_tool(Data)]},
+    Call = {get_token_provider_service_name(Data), 'Unwrap', {encode_wrapped_payment_tool(Data)}},
     UnwrappedPaymentTool =
         case capi_handler_utils:service_call(Call, Context) of
             {ok, Tool} ->
@@ -509,7 +509,7 @@ process_mobile_commerce_data(Data, Context) ->
 
 get_mobile_operator(MobilePhone, Context) ->
     PhoneNumber = encode_request_params(MobilePhone),
-    Call = {moneypenny, 'Lookup', [PhoneNumber]},
+    Call = {moneypenny, 'Lookup', {PhoneNumber}},
     case capi_handler_utils:service_call(Call, Context) of
         {ok, #mnp_ResponseData{operator = Operator}} ->
             {ok, Operator};

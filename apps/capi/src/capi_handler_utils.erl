@@ -89,7 +89,7 @@ get_party_id(Context) ->
 
 %%%
 
--spec service_call({atom(), atom(), list()}, processing_context()) -> woody:result().
+-spec service_call({atom(), atom(), tuple()}, processing_context()) -> woody:result().
 service_call({ServiceName, Function, Args}, #{woody_context := WoodyContext}) ->
     capi_woody_client:call_service(ServiceName, Function, Args, WoodyContext).
 

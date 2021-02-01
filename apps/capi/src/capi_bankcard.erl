@@ -65,7 +65,7 @@ validation_env() ->
 -spec lookup_bank_info(_PAN :: binary(), capi_handler:processing_context()) ->
     {ok, bank_info()} | {error, lookup_error()}.
 lookup_bank_info(PAN, Context) ->
-    Call = {binbase, 'Lookup', [PAN, {'last', #binbase_Last{}}]},
+    Call = {binbase, 'Lookup', {PAN, {'last', #binbase_Last{}}}},
     case capi_handler_utils:service_call(Call, Context) of
         {ok, BinData} ->
             decode_bank_info(BinData);
