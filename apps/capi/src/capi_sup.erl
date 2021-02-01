@@ -25,7 +25,7 @@ init([]) ->
     LechiffreSpec = lechiffre:child_spec(lechiffre, LechiffreOpts),
     {LogicHandler, LogicHandlerSpecs} = get_logic_handler_info(),
     AdditionalRoutes = [
-        {'_', [get_prometheus_route(), erl_health_handle:get_route(genlib_app:env(capi_pcidss, health_checkers, []))]}
+        {'_', [get_prometheus_route(), erl_health_handle:get_route(genlib_app:env(capi_pcidss, health_check, #{}))]}
     ],
     SwaggerSpec = capi_swagger_server:child_spec({AdditionalRoutes, LogicHandler}),
     UacConf = get_uac_config(),
