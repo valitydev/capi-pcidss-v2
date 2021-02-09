@@ -5,6 +5,8 @@
 
 -behaviour(supervisor).
 
+-define(APP, capi_pcidss).
+
 %% API
 -export([start_link/0]).
 
@@ -27,7 +29,8 @@ init([]) ->
     AdditionalRoutes = [
         {'_', [get_prometheus_route(), erl_health_handle:get_route(genlib_app:env(capi_pcidss, health_check, #{}))]}
     ],
-    SwaggerSpec = capi_swagger_server:child_spec({AdditionalRoutes, LogicHandler}),
+    SwaggerHandlerOpts = genlib_app:env(?APP, swagger_handler_opts, #{}),
+    SwaggerSpec = capi_swagger_server:child_spec({AdditionalRoutes, LogicHandler, SwaggerHandlerOpts}),
     UacConf = get_uac_config(),
     ok = uac:configure(UacConf),
     {ok, {
