@@ -8,11 +8,13 @@
     last_digits = <<"7892">>
 }).
 
+-define(BANK_NAME, <<"SAVINGS BANK OF THE GLORIOUS RUSSIAN FEDERATION">>).
+
 -define(BINBASE_LOOKUP_RESULT, ?BINBASE_LOOKUP_RESULT(<<"MASTERCARD">>)).
 -define(BINBASE_LOOKUP_RESULT(PaymentSystem), #'binbase_ResponseData'{
     bin_data = #'binbase_BinData'{
         payment_system = PaymentSystem,
-        bank_name = ?STRING,
+        bank_name = ?BANK_NAME,
         iso_country_code = <<"KAZ">>,
         card_type = debit,
         bin_data_id = {i, ?INTEGER}
@@ -59,6 +61,11 @@
     session_id = ?STRING
 }).
 
+-define(MESSAGE_ID, <<
+    "27FBD553651896F61FF58EBA63091A33FACDE10C662807FF4C1835A1EE89198917D4AB"
+    "6A56A1F250983A8EA287E3E4CE65E4782006937142857475861835A10158FDE54B52B5"
+>>).
+
 -define(APPLE_PAY_DETAILS,
     {apple, #paytoolprv_ApplePayDetails{
         transaction_id = ?STRING,
@@ -70,14 +77,14 @@
 
 -define(GOOGLE_PAY_DETAILS,
     {google, #paytoolprv_GooglePayDetails{
-        message_id = ?STRING,
+        message_id = ?MESSAGE_ID,
         message_expiration = ?TIMESTAMP
     }}
 ).
 
 -define(YANDEX_PAY_DETAILS,
     {yandex, #paytoolprv_YandexPayDetails{
-        message_id = ?STRING,
+        message_id = ?MESSAGE_ID,
         message_expiration = ?TIMESTAMP
     }}
 ).

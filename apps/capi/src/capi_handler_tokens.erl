@@ -12,7 +12,6 @@
 
 -import(capi_handler_utils, [logic_error/2, validation_error/1]).
 
--define(CAPI_NS, <<"com.rbkmoney.capi">>).
 -define(DEFAULT_PAYMENT_TOOL_TOKEN_LIFETIME, <<"64m">>).
 
 -spec process_request(
@@ -219,11 +218,11 @@ expand_card_info(
         bank_name := BankName,
         issuer_country := IssuerCountry,
         category := Category,
-        metadata := Metadata
+        metadata := {NS, Metadata}
     },
     HaveCVV
 ) ->
-    #domain_BankCard{
+    BankCard1 = #domain_BankCard{
         token = BankCard#cds_BankCard.token,
         bin = BankCard#cds_BankCard.bin,
         last_digits = BankCard#cds_BankCard.last_digits,
@@ -231,9 +230,9 @@ expand_card_info(
         issuer_country = IssuerCountry,
         category = Category,
         bank_name = BankName,
-        metadata = #{?CAPI_NS => capi_msgp_marshalling:marshal(Metadata)},
         is_cvv_empty = HaveCVV
-    }.
+    },
+    add_metadata(NS, Metadata, BankCard1).
 
 %% Seems to fit within PCIDSS requirments for all PAN lengths
 get_first6(CardNumber) ->
@@ -368,18 +367,18 @@ process_tokenized_card_data_result(
     }
 ) ->
     TokenProvider = get_payment_token_provider(PaymentDetails, PaymentData),
-    {
-        {bank_card, BankCard#domain_BankCard{
-            bin = get_tokenized_bin(PaymentData),
-            payment_system = PaymentSystem,
-            last_digits = get_tokenized_pan(Last4, PaymentData),
-            token_provider = TokenProvider,
-            is_cvv_empty = set_is_empty_cvv(TokenProvider, BankCard),
-            exp_date = encode_exp_date(genlib_map:get(exp_date, ExtraCardData)),
-            cardholder_name = genlib_map:get(cardholder, ExtraCardData)
-        }},
-        SessionID
-    }.
+    {NS, ProviderMetadata} = extract_payment_tool_provider_metadata(PaymentDetails),
+    BankCard1 = BankCard#domain_BankCard{
+        bin = get_tokenized_bin(PaymentData),
+        payment_system = PaymentSystem,
+        last_digits = get_tokenized_pan(Last4, PaymentData),
+        token_provider = TokenProvider,
+        is_cvv_empty = set_is_empty_cvv(TokenProvider, BankCard),
+        exp_date = encode_exp_date(genlib_map:get(exp_date, ExtraCardData)),
+        cardholder_name = genlib_map:get(cardholder, ExtraCardData)
+    },
+    BankCard2 = add_metadata(NS, ProviderMetadata, BankCard1),
+    {{bank_card, BankCard2}, SessionID}.
 
 get_tokenized_bin({card, #paytoolprv_Card{pan = PAN}}) ->
     get_first6(PAN);
@@ -421,6 +420,44 @@ get_payment_token_provider({google, _}, _PaymentData) ->
     googlepay;
 get_payment_token_provider({samsung, _}, _PaymentData) ->
     samsungpay.
+
+%% TODO
+%% All this stuff deserves its own module I believe. These super-long names are quite strong hints.
+-define(PAYMENT_TOOL_PROVIDER_META_NS, <<"com.rbkmoney.payment-tool-provider">>).
+
+extract_payment_tool_provider_metadata({_Provider, Details}) ->
+    {?PAYMENT_TOOL_PROVIDER_META_NS, #{
+        <<"details">> => extract_payment_details_metadata(Details)
+    }}.
+
+extract_payment_details_metadata(#paytoolprv_ApplePayDetails{
+    transaction_id = TransactionID,
+    device_id = DeviceID
+}) ->
+    #{
+        <<"transaction_id">> => TransactionID,
+        <<"device_id">> => DeviceID
+    };
+extract_payment_details_metadata(#paytoolprv_SamsungPayDetails{
+    device_id = DeviceID
+}) ->
+    #{
+        <<"device_id">> => DeviceID
+    };
+extract_payment_details_metadata(#paytoolprv_GooglePayDetails{
+    message_id = MessageID
+}) ->
+    #{
+        <<"message_id">> => MessageID
+    };
+extract_payment_details_metadata(#paytoolprv_YandexPayDetails{
+    message_id = MessageID
+}) ->
+    #{
+        <<"message_id">> => MessageID
+    }.
+
+%%
 
 encode_tokenized_card_data(#paytoolprv_UnwrappedPaymentTool{
     payment_data =
@@ -545,3 +582,11 @@ get_bank_info(CardDataPan, Context) ->
         {error, _Reason} ->
             throw({ok, logic_error(invalidRequest, <<"Unsupported card">>)})
     end.
+
+add_metadata(NS, Metadata, BankCard = #domain_BankCard{metadata = Acc = #{}}) ->
+    undefined = maps:get(NS, Acc, undefined),
+    BankCard#domain_BankCard{
+        metadata = Acc#{NS => capi_msgp_marshalling:marshal(Metadata)}
+    };
+add_metadata(NS, Metadata, BankCard = #domain_BankCard{metadata = undefined}) ->
+    add_metadata(NS, Metadata, BankCard#domain_BankCard{metadata = #{}}).
