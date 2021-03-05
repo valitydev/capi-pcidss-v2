@@ -403,6 +403,12 @@ set_is_empty_cvv(undefined, BankCard) ->
 set_is_empty_cvv(_, _) ->
     undefined.
 
+get_payment_token_provider({yandex, _}, _) ->
+    % TODO
+    % Infamous Yandex.Pay is exempt from the following consideration, because we need that. And because
+    % dropping following reclassification is too dangerous because of domain config complexity. I really
+    % hope this hyperkludge won't live long.
+    yandexpay;
 get_payment_token_provider(_PaymentDetails, {card, _}) ->
     % TODO
     % We deliberately hide the fact that we've got that payment tool from the likes of Google Chrome browser
@@ -414,9 +420,7 @@ get_payment_token_provider({apple, _}, _PaymentData) ->
 get_payment_token_provider({google, _}, _PaymentData) ->
     googlepay;
 get_payment_token_provider({samsung, _}, _PaymentData) ->
-    samsungpay;
-get_payment_token_provider({yandex, _}, _PaymentData) ->
-    yandexpay.
+    samsungpay.
 
 encode_tokenized_card_data(#paytoolprv_UnwrappedPaymentTool{
     payment_data =
