@@ -139,8 +139,7 @@ process_card_data_result(
             bin = get_first6(CardNumber),
             last_digits = get_last4(CardNumber),
             exp_date = encode_exp_date(genlib_map:get(exp_date, ExtraCardData)),
-            cardholder_name = genlib_map:get(cardholder, ExtraCardData),
-            tokenization_method = none
+            cardholder_name = genlib_map:get(cardholder, ExtraCardData)
         }},
         SessionID
     }.
@@ -376,8 +375,7 @@ process_tokenized_card_data_result(
         token_provider = TokenProvider,
         is_cvv_empty = set_is_empty_cvv(TokenProvider, BankCard),
         exp_date = encode_exp_date(genlib_map:get(exp_date, ExtraCardData)),
-        cardholder_name = genlib_map:get(cardholder, ExtraCardData),
-        tokenization_method = dpan
+        cardholder_name = genlib_map:get(cardholder, ExtraCardData)
     },
     BankCard2 = add_metadata(NS, ProviderMetadata, BankCard1),
     {{bank_card, BankCard2}, SessionID}.

@@ -203,7 +203,6 @@ create_visa_payment_resource_ok_test(Config) ->
     ),
     ClientInfo = #{<<"fingerprint">> => <<"test fingerprint">>},
     {ok, #{
-        <<"paymentToolToken">> := PaymentToolToken,
         <<"paymentToolDetails">> := #{
             <<"detailsType">> := <<"PaymentToolDetailsBankCard">>,
             <<"paymentSystem">> := <<"visa">>,
@@ -220,19 +219,7 @@ create_visa_payment_resource_ok_test(Config) ->
             <<"cvv">> => <<"232">>
         },
         <<"clientInfo">> => ClientInfo
-    }),
-    {ok, {PaymentTool, _Deadline}} = capi_crypto:decrypt_payment_tool_token(PaymentToolToken),
-    ?assertMatch(
-        {bank_card, #domain_BankCard{
-            payment_system = visa,
-            tokenization_method = none,
-            bin = <<"411111">>,
-            last_digits = <<"1111">>,
-            cardholder_name = <<"Alexander Weinerschnitzel">>,
-            exp_date = #domain_BankCardExpDate{month = 3, year = 2020}
-        }},
-        PaymentTool
-    ).
+    }).
 
 -spec expiration_date_fail_test(_) -> _.
 expiration_date_fail_test(Config) ->
@@ -884,8 +871,7 @@ create_googlepay_plain_payment_resource_ok_test(Config) ->
         #domain_BankCard{
             payment_system = mastercard,
             last_digits = <<"7892">>,
-            is_cvv_empty = true,
-            tokenization_method = dpan
+            is_cvv_empty = true
         },
         BankCard
     ).
@@ -929,7 +915,6 @@ create_yandexpay_tokenized_payment_resource_ok_test(Config) ->
     {ok, {PaymentTool, _Deadline}} = capi_crypto:decrypt_payment_tool_token(EncryptedToken),
     ?assertMatch(
         {bank_card, #domain_BankCard{
-            tokenization_method = dpan,
             metadata = #{
                 <<"com.rbkmoney.payment-tool-provider">> :=
                     {obj, #{
