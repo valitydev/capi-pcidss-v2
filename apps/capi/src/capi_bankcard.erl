@@ -26,7 +26,7 @@
 -export([validation_env/0]).
 
 -type bank_info() :: #{
-    payment_system := dmsl_domain_thrift:'BankCardPaymentSystem'(),
+    payment_system := dmsl_domain_thrift:'LegacyBankCardPaymentSystem'(),
     bank_name := binary(),
     issuer_country := dmsl_domain_thrift:'Residence'() | undefined,
     category := binary() | undefined,
@@ -46,7 +46,7 @@
 }.
 
 -type session_data() :: cds_proto_storage_thrift:'SessionData'().
--type payment_system() :: dmsl_domain_thrift:'BankCardPaymentSystem'().
+-type payment_system() :: dmsl_domain_thrift:'LegacyBankCardPaymentSystem'().
 -type reason() :: unrecognized | {invalid, cardnumber | cvv | exp_date, check()}.
 
 -opaque validation_env() :: #{
@@ -95,7 +95,7 @@ decode_bank_info(#'binbase_ResponseData'{bin_data = BinData, version = Version})
 %%
 %% List of known payment systems as of https://github.com/rbkmoney/binbase-data/commit/dcfabb1e.
 %% Please keep in sorted order.
--spec decode_payment_system(binary()) -> dmsl_domain_thrift:'BankCardPaymentSystem'().
+-spec decode_payment_system(binary()) -> dmsl_domain_thrift:'LegacyBankCardPaymentSystem'().
 decode_payment_system(<<"AMERICAN EXPRESS">>) ->
     amex;
 decode_payment_system(<<"AMERICAN EXPRESS COMPANY">>) ->

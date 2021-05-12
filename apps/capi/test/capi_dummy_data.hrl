@@ -51,7 +51,7 @@
         cardholder_name = ?STRING,
         last_4_digits = <<"7892">>,
         card_class = debit,
-        payment_system = mastercard
+        payment_system_deprecated = mastercard
     },
     details = Details
 }).

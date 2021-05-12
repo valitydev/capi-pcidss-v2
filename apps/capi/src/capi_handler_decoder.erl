@@ -43,8 +43,8 @@ decode_bank_card_details(BankCard, V) ->
         <<"last4">> => LastDigits,
         <<"first6">> => Bin,
         <<"cardNumberMask">> => decode_masked_pan(Bin, LastDigits),
-        <<"paymentSystem">> => genlib:to_binary(BankCard#domain_BankCard.payment_system),
-        <<"tokenProvider">> => decode_token_provider(BankCard#domain_BankCard.token_provider)
+        <<"paymentSystem">> => genlib:to_binary(BankCard#domain_BankCard.payment_system_deprecated),
+        <<"tokenProvider">> => decode_token_provider(BankCard#domain_BankCard.token_provider_deprecated)
     }).
 
 get_bank_card_bin(<<>>) ->
@@ -57,12 +57,12 @@ decode_token_provider(Provider) when Provider /= undefined ->
 decode_token_provider(undefined) ->
     undefined.
 
-decode_payment_terminal_details(#domain_PaymentTerminal{terminal_type = Type}, V) ->
+decode_payment_terminal_details(#domain_PaymentTerminal{terminal_type_deprecated = Type}, V) ->
     V#{
         <<"provider">> => genlib:to_binary(Type)
     }.
 
-decode_digital_wallet_details(#domain_DigitalWallet{provider = qiwi, id = ID}, V) ->
+decode_digital_wallet_details(#domain_DigitalWallet{provider_deprecated = qiwi, id = ID}, V) ->
     V#{
         <<"digitalWalletDetailsType">> => <<"DigitalWalletDetailsQIWI">>,
         <<"phoneNumberMask">> => mask_phone_number(ID)

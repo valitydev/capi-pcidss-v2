@@ -640,7 +640,7 @@ create_mobile_payment_resource_ok_test(Config) ->
                 cc = <<"7">>,
                 ctn = <<"9210001122">>
             },
-            operator = megafone
+            operator_deprecated = megafone
         },
         MobileCommerce
     ).
@@ -869,7 +869,7 @@ create_googlepay_plain_payment_resource_ok_test(Config) ->
     {bank_card, BankCard} = decrypt_payment_tool_token(PaymentToolToken),
     ?assertMatch(
         #domain_BankCard{
-            payment_system = mastercard,
+            payment_system_deprecated = mastercard,
             last_digits = <<"7892">>,
             is_cvv_empty = true
         },
@@ -1084,7 +1084,7 @@ check_support_decrypt_v2_test(_Config) ->
                 cc = <<"7">>,
                 ctn = <<"9210001122">>
             },
-            operator = megafone
+            operator_deprecated = megafone
         }},
         PaymentTool
     ),

@@ -226,7 +226,7 @@ expand_card_info(
         token = BankCard#cds_BankCard.token,
         bin = BankCard#cds_BankCard.bin,
         last_digits = BankCard#cds_BankCard.last_digits,
-        payment_system = PaymentSystem,
+        payment_system_deprecated = PaymentSystem,
         issuer_country = IssuerCountry,
         category = Category,
         bank_name = BankName,
@@ -264,7 +264,7 @@ put_session_to_cds(SessionID, SessionData, Context) ->
 
 process_payment_terminal_data(Data) ->
     PaymentTerminal = #domain_PaymentTerminal{
-        terminal_type = binary_to_existing_atom(genlib_map:get(<<"provider">>, Data), utf8)
+        terminal_type_deprecated = binary_to_existing_atom(genlib_map:get(<<"provider">>, Data), utf8)
     },
     {{payment_terminal, PaymentTerminal}, <<>>}.
 
@@ -274,7 +274,7 @@ process_digital_wallet_data(Data, IdempotentParams, Context) ->
         case Data of
             #{<<"digitalWalletType">> := <<"DigitalWalletQIWI">>} ->
                 #domain_DigitalWallet{
-                    provider = qiwi,
+                    provider_deprecated = qiwi,
                     id = maps:get(<<"phoneNumber">>, Data),
                     token = TokenID
                 }
@@ -359,7 +359,7 @@ process_tokenized_card_data_result(
     ExtraCardData,
     #paytoolprv_UnwrappedPaymentTool{
         card_info = #paytoolprv_CardInfo{
-            payment_system = PaymentSystem,
+            payment_system_deprecated = PaymentSystem,
             last_4_digits = Last4
         },
         payment_data = PaymentData,
@@ -370,9 +370,9 @@ process_tokenized_card_data_result(
     {NS, ProviderMetadata} = extract_payment_tool_provider_metadata(PaymentDetails),
     BankCard1 = BankCard#domain_BankCard{
         bin = get_tokenized_bin(PaymentData),
-        payment_system = PaymentSystem,
+        payment_system_deprecated = PaymentSystem,
         last_digits = get_tokenized_pan(Last4, PaymentData),
-        token_provider = TokenProvider,
+        token_provider_deprecated = TokenProvider,
         is_cvv_empty = set_is_empty_cvv(TokenProvider, BankCard),
         exp_date = encode_exp_date(genlib_map:get(exp_date, ExtraCardData)),
         cardholder_name = genlib_map:get(cardholder, ExtraCardData)
@@ -571,7 +571,7 @@ encode_request_params(#{<<"cc">> := Cc, <<"ctn">> := Ctn}) ->
 encode_mobile_commerce(MobilePhone, Operator) ->
     #{<<"cc">> := Cc, <<"ctn">> := Ctn} = MobilePhone,
     #domain_MobileCommerce{
-        operator = Operator,
+        operator_deprecated = Operator,
         phone = #domain_MobilePhone{cc = Cc, ctn = Ctn}
     }.
 
