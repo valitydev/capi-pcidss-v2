@@ -29,34 +29,41 @@ process_request('CreatePaymentResource' = OperationID, Req, Context) ->
         ExternalID = maps:get(<<"externalID">>, Params, undefined),
         IdempotentKey = capi_bender:get_idempotent_key(OperationID, PartyID, ExternalID),
         IdempotentParams = {ExternalID, IdempotentKey},
-        {PaymentTool, PaymentSessionID} =
+        {PaymentTool, PaymentSessionID, PaymentToolDeadline} =
             case Data of
                 #{<<"paymentToolType">> := <<"CardData">>} ->
-                    process_card_data(Data, IdempotentParams, Context);
+                    erlang:append_element(process_card_data(Data, IdempotentParams, Context), undefined);
                 #{<<"paymentToolType">> := <<"PaymentTerminalData">>} ->
-                    process_payment_terminal_data(Data);
+                    {process_payment_terminal_data(Data), <<>>, undefined};
                 #{<<"paymentToolType">> := <<"DigitalWalletData">>} ->
-                    process_digital_wallet_data(Data, IdempotentParams, Context);
+                    {process_digital_wallet_data(Data, IdempotentParams, Context), <<>>, undefined};
                 #{<<"paymentToolType">> := <<"TokenizedCardData">>} ->
                     process_tokenized_card_data(Data, IdempotentParams, Context);
                 #{<<"paymentToolType">> := <<"CryptoWalletData">>} ->
-                    process_crypto_wallet_data(Data);
+                    {process_crypto_wallet_data(Data), <<>>, undefined};
                 #{<<"paymentToolType">> := <<"MobileCommerceData">>} ->
-                    process_mobile_commerce_data(Data, Context)
+                    {process_mobile_commerce_data(Data, Context), <<>>, undefined}
             end,
         PaymentResource = #domain_DisposablePaymentResource{
             payment_tool = PaymentTool,
             payment_session_id = PaymentSessionID,
             client_info = capi_handler_encoder:encode_client_info(ClientInfo)
         },
-        TokenValidUntil = capi_utils:deadline_from_timeout(payment_tool_token_lifetime()),
-        EncryptedToken = capi_crypto:create_encrypted_payment_tool_token(PaymentTool, TokenValidUntil),
+        % Ограничиваем время жизни платежного токена временем жизни платежного инструмента.
+        % Если время жизни платежного инструмента не задано, то интервалом заданным в настройках.
+        TokenDeadline =
+            case {PaymentToolDeadline, payment_tool_token_deadline()} of
+                {ToolDeadline, DefaultDeadline} when is_atom(ToolDeadline) -> DefaultDeadline;
+                {ToolDeadline, DefaultDeadline} when ToolDeadline < DefaultDeadline -> ToolDeadline;
+                {_, DefaultDeadline} -> DefaultDeadline
+            end,
+        EncryptedToken = capi_crypto:create_encrypted_payment_tool_token(PaymentTool, TokenDeadline),
         {ok,
             {201, #{},
                 capi_handler_decoder:decode_disposable_payment_resource(
                     PaymentResource,
                     EncryptedToken,
-                    TokenValidUntil
+                    TokenDeadline
                 )}}
     catch
         Result -> Result
@@ -68,19 +75,21 @@ process_request(_OperationID, _Req, _Context) ->
 
 %%
 
--spec payment_tool_token_lifetime() -> timeout().
-payment_tool_token_lifetime() ->
-    case genlib_app:env(capi_pcidss, payment_tool_token_lifetime, ?DEFAULT_PAYMENT_TOOL_TOKEN_LIFETIME) of
-        Value when is_integer(Value) ->
-            Value;
-        Value ->
-            case capi_utils:parse_lifetime(Value) of
-                {ok, Lifetime} ->
-                    Lifetime;
-                Error ->
-                    erlang:error(Error, [Value])
-            end
-    end.
+-spec payment_tool_token_deadline() -> capi_utils:deadline().
+payment_tool_token_deadline() ->
+    TokenLifetime =
+        case genlib_app:env(capi_pcidss, payment_tool_token_lifetime, ?DEFAULT_PAYMENT_TOOL_TOKEN_LIFETIME) of
+            Value when is_integer(Value) ->
+                Value;
+            Value ->
+                case capi_utils:parse_lifetime(Value) of
+                    {ok, Lifetime} ->
+                        Lifetime;
+                    Error ->
+                        erlang:error(Error, [Value])
+                end
+        end,
+    capi_utils:deadline_from_timeout(TokenLifetime).
 
 %%
 
@@ -266,7 +275,7 @@ process_payment_terminal_data(Data) ->
     PaymentTerminal = #domain_PaymentTerminal{
         terminal_type_deprecated = binary_to_existing_atom(genlib_map:get(<<"provider">>, Data), utf8)
     },
-    {{payment_terminal, PaymentTerminal}, <<>>}.
+    {payment_terminal, PaymentTerminal}.
 
 process_digital_wallet_data(Data, IdempotentParams, Context) ->
     TokenID = maybe_store_token_in_tds(Data, IdempotentParams, Context),
@@ -279,7 +288,7 @@ process_digital_wallet_data(Data, IdempotentParams, Context) ->
                     token = TokenID
                 }
         end,
-    {{digital_wallet, DigitalWallet}, <<>>}.
+    {digital_wallet, DigitalWallet}.
 
 maybe_store_token_in_tds(#{<<"accessToken">> := TokenContent}, IdempotentParams, Context) ->
     #{woody_context := WoodyCtx} = Context,
@@ -363,7 +372,8 @@ process_tokenized_card_data_result(
             last_4_digits = Last4
         },
         payment_data = PaymentData,
-        details = PaymentDetails
+        details = PaymentDetails,
+        valid_until = ValidUntil
     }
 ) ->
     TokenProvider = get_payment_token_provider(PaymentDetails, PaymentData),
@@ -378,7 +388,8 @@ process_tokenized_card_data_result(
         cardholder_name = genlib_map:get(cardholder, ExtraCardData)
     },
     BankCard2 = add_metadata(NS, ProviderMetadata, BankCard1),
-    {{bank_card, BankCard2}, SessionID}.
+    Deadline = capi_utils:deadline_from_binary(ValidUntil),
+    {{bank_card, BankCard2}, SessionID, Deadline}.
 
 get_tokenized_bin({card, #paytoolprv_Card{pan = PAN}}) ->
     get_first6(PAN);
@@ -538,7 +549,7 @@ encode_tokenized_session_data(#paytoolprv_UnwrappedPaymentTool{
 
 process_crypto_wallet_data(Data) ->
     #{<<"cryptoCurrency">> := CryptoCurrency} = Data,
-    {{crypto_currency, capi_handler_decoder:convert_crypto_currency_from_swag(CryptoCurrency)}, <<>>}.
+    {crypto_currency, capi_handler_decoder:convert_crypto_currency_from_swag(CryptoCurrency)}.
 
 %%
 
@@ -546,7 +557,7 @@ process_mobile_commerce_data(Data, Context) ->
     MobilePhone = maps:get(<<"mobilePhone">>, Data),
     {ok, Operator} = get_mobile_operator(MobilePhone, Context),
     MobileCommerce = encode_mobile_commerce(MobilePhone, Operator),
-    {{mobile_commerce, MobileCommerce}, <<>>}.
+    {mobile_commerce, MobileCommerce}.
 
 get_mobile_operator(MobilePhone, Context) ->
     PhoneNumber = encode_request_params(MobilePhone),
