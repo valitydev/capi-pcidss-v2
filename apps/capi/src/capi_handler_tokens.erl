@@ -122,13 +122,14 @@ validate_ip(IP) ->
 
 %%
 
-process_card_data(Data, IdempotentParams, Context) ->
+process_card_data(Data, IdempotentParams, #{woody_context := WoodyCtx} = Context) ->
     SessionData = encode_session_data(Data),
     {CardData, ExtraCardData} = encode_card_data(Data),
     BankInfo = get_bank_info(CardData#'cds_PutCardData'.pan, Context),
     PaymentSystem = capi_bankcard:payment_system(BankInfo),
     ValidationEnv = capi_bankcard:validation_env(),
-    case capi_bankcard:validate(CardData, ExtraCardData, SessionData, PaymentSystem, ValidationEnv) of
+    BankCardData = capi_bankcard:merge_data(CardData, ExtraCardData, SessionData),
+    case bankcard_validator:validate(BankCardData, PaymentSystem, ValidationEnv, WoodyCtx) of
         ok ->
             Result = put_card_data_to_cds(CardData, SessionData, IdempotentParams, BankInfo, Context),
             process_card_data_result(Result, CardData, ExtraCardData);
@@ -223,7 +224,7 @@ put_card_to_cds(CardData, SessionData, BankInfo, Context) ->
 expand_card_info(
     BankCard,
     #{
-        payment_system := PaymentSystem,
+        payment_system_deprecated := PaymentSystem,
         bank_name := BankName,
         issuer_country := IssuerCountry,
         category := Category,
@@ -303,7 +304,7 @@ maybe_store_token_in_tds(#{<<"accessToken">> := TokenContent}, IdempotentParams,
 maybe_store_token_in_tds(_, _IdempotentParams, _Context) ->
     undefined.
 
-process_tokenized_card_data(Data, IdempotentParams, Context) ->
+process_tokenized_card_data(Data, IdempotentParams, #{woody_context := WoodyCtx} = Context) ->
     Call = {get_token_provider_service_name(Data), 'Unwrap', {encode_wrapped_payment_tool(Data)}},
     UnwrappedPaymentTool =
         case capi_handler_utils:service_call(Call, Context) of
@@ -317,7 +318,8 @@ process_tokenized_card_data(Data, IdempotentParams, Context) ->
     BankInfo = get_bank_info(CardData#cds_PutCardData.pan, Context),
     PaymentSystem = capi_bankcard:payment_system(BankInfo),
     ValidationEnv = capi_bankcard:validation_env(),
-    case capi_bankcard:validate(CardData, ExtraCardData, SessionData, PaymentSystem, ValidationEnv) of
+    BankCardData = capi_bankcard:merge_data(CardData, ExtraCardData, SessionData),
+    case bankcard_validator:validate(BankCardData, PaymentSystem, ValidationEnv, WoodyCtx) of
         ok ->
             Result = put_card_data_to_cds(CardData, SessionData, IdempotentParams, BankInfo, Context),
             process_tokenized_card_data_result(Result, ExtraCardData, UnwrappedPaymentTool);

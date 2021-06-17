@@ -28,8 +28,8 @@
     expiration_date_fail_test/1,
     create_visa_payment_resource_ok_test/1,
     create_payment_resource_invalid_cardholder_test/1,
-    create_visa_with_empty_cvv_ok_test/1,
-    create_visa_with_wrong_cvv_test/1,
+    create_visa_with_empty_cvc_ok_test/1,
+    create_visa_with_wrong_cvc_test/1,
     create_visa_with_wrong_cardnumber_test/1,
     create_visa_payment_resource_idemp_ok_test/1,
     create_visa_payment_resource_idemp_fail_test/1,
@@ -101,8 +101,8 @@ groups() ->
             expiration_date_fail_test,
             create_visa_payment_resource_ok_test,
             create_payment_resource_invalid_cardholder_test,
-            create_visa_with_empty_cvv_ok_test,
-            create_visa_with_wrong_cvv_test,
+            create_visa_with_empty_cvc_ok_test,
+            create_visa_with_wrong_cvc_test,
             create_visa_with_wrong_cardnumber_test,
             create_visa_payment_resource_idemp_ok_test,
             create_visa_payment_resource_idemp_fail_test,
@@ -319,8 +319,8 @@ create_payment_resource_invalid_cardholder_test(Config) ->
         }
     ).
 
--spec create_visa_with_empty_cvv_ok_test(_) -> _.
-create_visa_with_empty_cvv_ok_test(Config) ->
+-spec create_visa_with_empty_cvc_ok_test(_) -> _.
+create_visa_with_empty_cvc_ok_test(Config) ->
     _ = capi_ct_helper:mock_services(
         [
             {cds_storage, fun
@@ -364,8 +364,8 @@ create_visa_with_empty_cvv_ok_test(Config) ->
         <<"clientInfo">> => ClientInfo
     }).
 
--spec create_visa_with_wrong_cvv_test(_) -> _.
-create_visa_with_wrong_cvv_test(Config) ->
+-spec create_visa_with_wrong_cvc_test(_) -> _.
+create_visa_with_wrong_cvc_test(Config) ->
     _ = capi_ct_helper:mock_services(
         [
             {bender, fun('GenerateID', _) -> {ok, capi_ct_helper_bender:get_result(<<"bender_key">>)} end},

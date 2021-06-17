@@ -27,6 +27,16 @@
 -define(CAPI_PORT, 8080).
 -define(CAPI_HOST_NAME, "localhost").
 -define(CAPI_URL, ?CAPI_HOST_NAME ++ ":" ++ integer_to_list(?CAPI_PORT)).
+-define(PAYMENT_SYSTEM_REF(ID), {payment_system, #domain_PaymentSystemRef{id = ID}}).
+-define(PAYMENT_SYSTEM_OBJ(ID, Rules),
+    {payment_system, #domain_PaymentSystemObject{
+        ref = #domain_PaymentSystemRef{id = ID},
+        data = #domain_PaymentSystem{
+            name = ID,
+            validation_rules = Rules
+        }
+    }}
+).
 
 %%
 -type config() :: [{atom(), any()}].
@@ -42,8 +52,35 @@ init_suite(Module, Config, CapiEnv) ->
     Apps1 =
         start_app(woody) ++
             start_app(scoper),
+    ServiceURLs = mock_services_(
+        [
+            {
+                'Repository',
+                {dmsl_domain_config_thrift, 'Repository'},
+                fun('Checkout', _) ->
+                    {ok, #'Snapshot'{
+                        version = 1,
+                        domain = #{
+                            ?PAYMENT_SYSTEM_REF(<<"VISA">>) =>
+                                ?PAYMENT_SYSTEM_OBJ(
+                                    <<"VISA">>,
+                                    bankcard_validator_legacy:get_payment_system_ruleset(<<"VISA">>)
+                                ),
+                            ?PAYMENT_SYSTEM_REF(<<"MASTERCARD">>) =>
+                                ?PAYMENT_SYSTEM_OBJ(
+                                    <<"MASTERCARD">>,
+                                    bankcard_validator_legacy:get_payment_system_ruleset(<<"MASTERCARD">>)
+                                )
+                        }
+                    }}
+                end
+            }
+        ],
+        SupPid
+    ),
     Apps2 =
-        start_capi(Config, CapiEnv),
+        start_capi(Config, CapiEnv) ++
+            start_app(dmt_client, [{max_cache_size, #{}}, {service_urls, ServiceURLs}, {cache_update_interval, 50000}]),
     [{apps, lists:reverse(Apps2 ++ Apps1)}, {suite_test_sup, SupPid} | Config].
 
 -spec start_app(app_name()) -> [app_name()].
