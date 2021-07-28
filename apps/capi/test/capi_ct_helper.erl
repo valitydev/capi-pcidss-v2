@@ -49,9 +49,8 @@ init_suite(Module, Config) ->
 -spec init_suite(module(), config(), any()) -> config().
 init_suite(Module, Config, CapiEnv) ->
     SupPid = start_mocked_service_sup(Module),
-    Apps1 =
-        start_app(woody) ++
-            start_app(scoper),
+    WoodyApp = start_app(woody),
+    ScoperApp = start_app(scoper),
     ServiceURLs = mock_services_(
         [
             {
@@ -78,10 +77,16 @@ init_suite(Module, Config, CapiEnv) ->
         ],
         SupPid
     ),
-    Apps2 =
-        start_capi(Config, CapiEnv) ++
-            start_app(dmt_client, [{max_cache_size, #{}}, {service_urls, ServiceURLs}, {cache_update_interval, 50000}]),
-    [{apps, lists:reverse(Apps2 ++ Apps1)}, {suite_test_sup, SupPid} | Config].
+    DmtClient =
+        start_app(dmt_client, [
+            {max_cache_size, #{}},
+            {service_urls, ServiceURLs},
+            {cache_update_interval, 50000}
+        ]),
+    Capi = start_capi(Config, CapiEnv),
+    BouncerApp = capi_ct_helper_bouncer:mock_client(SupPid),
+    Apps = lists:reverse(Capi ++ DmtClient ++ WoodyApp ++ ScoperApp ++ BouncerApp),
+    [{apps, Apps}, {suite_test_sup, SupPid} | Config].
 
 -spec start_app(app_name()) -> [app_name()].
 start_app(woody = AppName) ->
@@ -113,10 +118,17 @@ start_capi(Config, ExtraEnv) ->
                 {ip, ?CAPI_IP},
                 {port, ?CAPI_PORT},
                 {service_type, real},
+                {bouncer_ruleset_id, ?TEST_RULESET_ID},
                 {access_conf, #{
                     jwt => #{
                         keyset => #{
-                            capi_pcidss => {pem_file, get_keysource("keys/local/private.pem", Config)}
+                            capi_pcidss => #{
+                                source => {pem_file, get_keysource("keys/local/private.pem", Config)},
+                                metadata => #{
+                                    auth_method => user_session_token,
+                                    user_realm => <<"external">>
+                                }
+                            }
                         }
                     }
                 }},
@@ -149,6 +161,7 @@ issue_token(PartyID, ACL, LifeTime, ExtraProperties) ->
         #{
             ?STRING => ?STRING,
             <<"exp">> => LifeTime,
+            <<"email">> => <<"bla@bla.ru">>,
             <<"resource_access">> => #{
                 <<"common-api">> => uac_acl:from_list(ACL)
             }
@@ -203,18 +216,17 @@ mock_services_(Services, Config) when is_list(Config) ->
     mock_services_(Services, ?config(test_sup, Config));
 mock_services_(Services, SupPid) when is_pid(SupPid) ->
     Name = lists:map(fun get_service_name/1, Services),
-    Port = get_random_port(),
     {ok, IP} = inet:parse_address(?CAPI_IP),
-    ChildSpec = woody_server:child_spec(
-        {dummy, Name},
-        #{
-            ip => IP,
-            port => Port,
-            event_handler => {scoper_woody_event_handler, #{}},
-            handlers => lists:map(fun mock_service_handler/1, Services)
-        }
-    ),
+    ServerID = {dummy, Name},
+    WoodyOpts = #{
+        ip => IP,
+        port => 0,
+        event_handler => {scoper_woody_event_handler, #{}},
+        handlers => lists:map(fun mock_service_handler/1, Services)
+    },
+    ChildSpec = woody_server:child_spec(ServerID, WoodyOpts),
     {ok, _} = supervisor:start_child(SupPid, ChildSpec),
+    {_IP, Port} = woody_server:get_addr(ServerID, WoodyOpts),
     lists:foldl(
         fun(Service, Acc) ->
             ServiceName = get_service_name(Service),
@@ -236,10 +248,6 @@ mock_service_handler({ServiceName, WoodyService, Fun}) ->
 
 mock_service_handler(ServiceName, WoodyService, Fun) ->
     {make_path(ServiceName), {WoodyService, {capi_dummy_service, #{function => Fun}}}}.
-
-% TODO not so failproof, ideally we need to bind socket first and then give to a ranch listener
-get_random_port() ->
-    rand:uniform(32768) + 32767.
 
 make_url(ServiceName, Port) ->
     iolist_to_binary(["http://", ?CAPI_HOST_NAME, ":", integer_to_list(Port), make_path(ServiceName)]).

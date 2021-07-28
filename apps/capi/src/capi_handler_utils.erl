@@ -87,7 +87,7 @@ server_error(Code) when Code >= 500 andalso Code < 600 ->
 
 -spec get_party_id(processing_context()) -> binary().
 get_party_id(Context) ->
-    uac_authorizer_jwt:get_subject_id(get_auth_context(Context)).
+    capi_auth:get_subject_id(get_auth_context(Context)).
 
 %%%
 

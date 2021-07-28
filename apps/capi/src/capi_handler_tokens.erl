@@ -6,24 +6,94 @@
 -include_lib("damsel/include/dmsl_payment_tool_provider_thrift.hrl").
 -include_lib("moneypenny/include/moneypenny_mnp_thrift.hrl").
 
+-include_lib("bouncer_proto/include/bouncer_restriction_thrift.hrl").
+
 -behaviour(capi_handler).
 
--export([process_request/3]).
+-export([prepare/3]).
 
 -import(capi_handler_utils, [logic_error/2, validation_error/1]).
 
 -define(DEFAULT_PAYMENT_TOOL_TOKEN_LIFETIME, <<"64m">>).
 
--spec process_request(
+-spec prepare(
     OperationID :: capi_handler:operation_id(),
     Req :: capi_handler:request_data(),
     Context :: capi_handler:processing_context()
-) -> {ok | error, capi_handler:response() | noimpl}.
-process_request('CreatePaymentResource' = OperationID, Req, Context) ->
+) -> {ok, capi_handler:request_state()} | {error, noimpl}.
+prepare('CreatePaymentResource' = OperationID, Req, Context) ->
+    PartyID = capi_handler_utils:get_party_id(Context),
+
     Params = maps:get('PaymentResourceParams', Req),
-    ClientInfo = enrich_client_info(maps:get(<<"clientInfo">>, Params), Context),
+    ClientInfo = maps:get(<<"clientInfo">>, Params),
+
+    ReplacementIP = get_replacement_ip(ClientInfo),
+
+    Authorize = fun() ->
+        Prototypes = [
+            {operation, #{id => OperationID, party => PartyID}},
+            {tokens, #{replacement_ip => ReplacementIP}}
+        ],
+
+        IpReplacementAllowedOld = ip_replacement_allowed_legacy(Context),
+
+        BouncerResult = capi_auth:authorize_operation(Prototypes, Context, Req),
+
+        Result =
+            case handle_auth_result(BouncerResult) of
+                allowed when ReplacementIP /= undefined, not IpReplacementAllowedOld ->
+                    logger:warning(
+                        "Request fully allowed, yet IP replacement was forbidden " ++
+                            "in old version: restricting replacement"
+                    ),
+                    {restricted, #brstn_Restrictions{
+                        capi = #brstn_RestrictionsCommonAPI{
+                            ip_replacement_forbidden = true
+                        }
+                    }};
+                {restricted, ip_replacement_forbidden} when ReplacementIP /= undefined, IpReplacementAllowedOld ->
+                    logger:warning(
+                        "Request was restricted with IP replacement, yet it " ++
+                            " was allowed in old version: allowing request and replacement"
+                    ),
+                    allowed;
+                _ ->
+                    BouncerResult
+            end,
+
+        {ok, Result}
+    end,
+    Process = fun(Resolution) ->
+        process_request(OperationID, Req, Context, Resolution)
+    end,
+    {ok, #{authorize => Authorize, process => Process}};
+prepare(_OperationID, _Req, _Context) ->
+    {error, noimpl}.
+
+-spec process_request(
+    OperationID :: capi_handler:operation_id(),
+    Req :: capi_handler:request_data(),
+    Context :: capi_handler:processing_context(),
+    Resolution :: capi_auth:resolution()
+) -> {ok | error, capi_handler:response() | noimpl}.
+process_request('CreatePaymentResource' = OperationID, Req, Context, Resolution) ->
+    Params = maps:get('PaymentResourceParams', Req),
+    ClientInfo0 = maps:get(<<"clientInfo">>, Params),
+
+    ClientIP =
+        case handle_auth_result(Resolution) of
+            {restricted, ip_replacement_forbidden} ->
+                prepare_requester_ip(Context);
+            allowed ->
+                case get_replacement_ip(ClientInfo0) of
+                    undefined -> prepare_requester_ip(Context);
+                    IP -> IP
+                end
+        end,
+
+    ClientInfo = maps:put(<<"ip">>, ClientIP, ClientInfo0),
+
     try
-        % "V" ????
         Data = maps:get(<<"paymentTool">>, Params),
         PartyID = capi_handler_utils:get_party_id(Context),
         ExternalID = maps:get(<<"externalID">>, Params, undefined),
@@ -67,11 +137,7 @@ process_request('CreatePaymentResource' = OperationID, Req, Context) ->
                 )}}
     catch
         Result -> Result
-    end;
-%%
-
-process_request(_OperationID, _Req, _Context) ->
-    {error, noimpl}.
+    end.
 
 %%
 
@@ -93,27 +159,47 @@ payment_tool_token_deadline() ->
 
 %%
 
-enrich_client_info(ClientInfo, Context) ->
-    Claims = capi_handler_utils:get_auth_context(Context),
-    IP =
-        case uac_authorizer_jwt:get_claim(<<"ip_replacement_allowed">>, Claims, false) of
-            true ->
-                UncheckedIP = maps:get(<<"ip">>, ClientInfo, prepare_client_ip(Context)),
-                validate_ip(UncheckedIP);
-            false ->
-                prepare_client_ip(Context);
-            Value ->
-                _ = logger:notice("Unexpected ip_replacement_allowed value: ~p", [Value]),
-                prepare_client_ip(Context)
-        end,
-    ClientInfo#{<<"ip">> => IP}.
+ip_replacement_allowed_legacy(Context) ->
+    LegacyContext = capi_auth:get_legacy_context(capi_auth:extract_auth_context(Context)),
 
-prepare_client_ip(Context) ->
+    case uac_authorizer_jwt:get_claim(<<"ip_replacement_allowed">>, LegacyContext, false) of
+        NonBull when not is_boolean(NonBull) ->
+            _ = logger:notice("Unexpected ip_replacement_allowed value: ~p", [NonBull]),
+            NonBull;
+        Bool ->
+            Bool
+    end.
+
+handle_auth_result(allowed) ->
+    allowed;
+handle_auth_result(forbidden) ->
+    forbidden;
+handle_auth_result({forbidden, _Reason} = Forbidden) ->
+    Forbidden;
+handle_auth_result({restricted, #brstn_Restrictions{capi = CAPI}}) ->
+    case CAPI of
+        #brstn_RestrictionsCommonAPI{
+            ip_replacement_forbidden = true
+        } ->
+            {restricted, ip_replacement_forbidden};
+        _ ->
+            allowed
+    end.
+
+prepare_requester_ip(Context) ->
     #{ip_address := IP} = get_peer_info(Context),
     genlib:to_binary(inet:ntoa(IP)).
 
 get_peer_info(#{swagger_context := #{peer := Peer}}) ->
     Peer.
+
+get_replacement_ip(ClientInfo) ->
+    case maps:find(<<"ip">>, ClientInfo) of
+        {ok, UncheckedIP} ->
+            validate_ip(UncheckedIP);
+        error ->
+            undefined
+    end.
 
 validate_ip(IP) ->
     % placeholder so far.

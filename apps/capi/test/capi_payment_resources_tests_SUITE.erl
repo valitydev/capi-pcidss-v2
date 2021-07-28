@@ -3,11 +3,9 @@
 -include_lib("common_test/include/ct.hrl").
 -include_lib("stdlib/include/assert.hrl").
 
--include_lib("damsel/include/dmsl_domain_config_thrift.hrl").
 -include_lib("damsel/include/dmsl_payment_processing_thrift.hrl").
--include_lib("damsel/include/dmsl_payment_processing_errors_thrift.hrl").
 -include_lib("damsel/include/dmsl_payment_tool_provider_thrift.hrl").
--include_lib("damsel/include/dmsl_payment_tool_token_thrift.hrl").
+-include_lib("bouncer_proto/include/bouncer_restriction_thrift.hrl").
 -include_lib("binbase_proto/include/binbase_binbase_thrift.hrl").
 -include_lib("cds_proto/include/cds_proto_storage_thrift.hrl").
 -include_lib("capi_dummy_data.hrl").
@@ -62,6 +60,9 @@
 -define(CAPI_HOST_NAME, "localhost").
 -define(CAPI_URL, ?CAPI_HOST_NAME ++ ":" ++ integer_to_list(?CAPI_PORT)).
 
+%% 01/01/2100 @ 12:00am (UTC)
+-define(DISTANT_TIMESTAMP, 4102444800).
+
 -define(IDEMPOTENT_KEY, <<"capi/CreatePaymentResource/TEST/ext_id">>).
 
 -define(TEST_PAYMENT_TOOL_ARGS, #{
@@ -91,7 +92,9 @@ init([]) ->
 all() ->
     [
         {group, payment_resources},
-        {group, ip_replacement_allowed}
+        {group, ip_replacement_allowed},
+        {group, ip_replacement_legacy_allowed},
+        {group, ip_replacement_legacy_forbidden}
     ].
 
 -spec groups() -> [{group_name(), list(), [test_case_name()]}].
@@ -131,6 +134,12 @@ groups() ->
         ]},
         {ip_replacement_allowed, [], [
             ip_replacement_allowed_test
+        ]},
+        {ip_replacement_legacy_allowed, [], [
+            ip_replacement_allowed_test
+        ]},
+        {ip_replacement_legacy_forbidden, [], [
+            ip_replacement_not_allowed_test
         ]}
     ].
 
@@ -154,14 +163,45 @@ end_per_suite(C) ->
 -spec init_per_group(group_name(), config()) -> config().
 init_per_group(payment_resources, Config) ->
     Token = capi_ct_helper:issue_token([{[payment_resources], write}], unlimited),
-    [{context, capi_ct_helper:get_context(Token)} | Config];
+
+    [{context, capi_ct_helper:get_context(Token)} | start_group_apps(Config)];
 init_per_group(ip_replacement_allowed, Config) ->
     ExtraProperties = #{<<"ip_replacement_allowed">> => true},
     Token = capi_ct_helper:issue_token(?STRING, [{[payment_resources], write}], unlimited, ExtraProperties),
-    [{context, capi_ct_helper:get_context(Token)} | Config].
+
+    [{context, capi_ct_helper:get_context(Token)} | start_group_apps(Config)];
+init_per_group(ip_replacement_legacy_allowed, Config) ->
+    ExtraProperties = #{<<"ip_replacement_allowed">> => true},
+    Token = capi_ct_helper:issue_token(?STRING, [{[payment_resources], write}], unlimited, ExtraProperties),
+
+    JudgeFun = capi_ct_helper_bouncer:judge_always_restricted(
+        #brstn_Restrictions{
+            capi = #brstn_RestrictionsCommonAPI{
+                ip_replacement_forbidden = true
+            }
+        }
+    ),
+
+    [{context, capi_ct_helper:get_context(Token)} | start_group_apps(Config, JudgeFun)];
+init_per_group(ip_replacement_legacy_forbidden, Config) ->
+    Token = capi_ct_helper:issue_token(?STRING, [{[payment_resources], write}], unlimited),
+
+    [
+        {context, capi_ct_helper:get_context(Token)}
+        | start_group_apps(Config, capi_ct_helper_bouncer:judge_always_forbidden())
+    ].
+
+start_group_apps(Config) ->
+    start_group_apps(Config, capi_ct_helper_bouncer:judge_always_allowed()).
+start_group_apps(Config, JudgeFun) ->
+    SupPid = capi_ct_helper:start_mocked_service_sup(?MODULE),
+    Apps0 = capi_ct_helper_bouncer:mock_arbiter(JudgeFun, SupPid),
+    Apps1 = capi_ct_helper_tk:mock_service(capi_ct_helper_tk:user_session_handler(), SupPid),
+    [{group_apps, Apps0 ++ Apps1} | Config].
 
 -spec end_per_group(group_name(), config()) -> _.
 end_per_group(_Group, C) ->
+    _ = capi_utils:maybe(?config(group_test_sup, C), fun capi_ct_helper:stop_mocked_service_sup/1),
     proplists:delete(context, C).
 
 -spec init_per_testcase(test_case_name(), config()) -> config().
@@ -980,7 +1020,7 @@ authorization_positive_lifetime_ok_test(Config) ->
         ],
         Config
     ),
-    Token = capi_ct_helper:issue_token([{[payment_resources], write}], {lifetime, 10}),
+    Token = capi_ct_helper:issue_token([{[payment_resources], write}], ?DISTANT_TIMESTAMP),
     {ok, _} = capi_client_tokens:create_payment_resource(
         capi_ct_helper:get_context(Token),
         ?TEST_PAYMENT_TOOL_ARGS
@@ -1019,7 +1059,7 @@ authorization_far_future_deadline_ok_test(Config) ->
         Config
     ),
     % 01/01/2100 @ 12:00am (UTC)
-    Token = capi_ct_helper:issue_token([{[payment_resources], write}], {deadline, 4102444800}),
+    Token = capi_ct_helper:issue_token([{[payment_resources], write}], ?DISTANT_TIMESTAMP),
     {ok, _} = capi_client_tokens:create_payment_resource(
         capi_ct_helper:get_context(Token),
         ?TEST_PAYMENT_TOOL_ARGS
@@ -1035,7 +1075,7 @@ authorization_error_no_header_test(_Config) ->
 
 -spec authorization_error_no_permission_test(config()) -> _.
 authorization_error_no_permission_test(_Config) ->
-    Token = capi_ct_helper:issue_token([{[payment_resources], read}], {lifetime, 10}),
+    Token = capi_ct_helper:issue_token([{[payment_resources], read}], ?DISTANT_TIMESTAMP),
     ?badresp(401) = capi_client_tokens:create_payment_resource(
         capi_ct_helper:get_context(Token),
         ?TEST_PAYMENT_TOOL_ARGS

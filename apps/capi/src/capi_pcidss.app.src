@@ -28,7 +28,9 @@
         cds_proto,
         prometheus,
         prometheus_cowboy,
-        bankcard_validator
+        bankcard_validator,
+        bouncer_client,
+        token_keeper_client
     ]},
     {env, []}
 ]}.

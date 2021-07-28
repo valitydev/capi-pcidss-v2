@@ -54,7 +54,7 @@ get_logic_handler_info() ->
 get_uac_config() ->
     maps:merge(
         get_authorization_config(),
-        #{access => capi_auth:get_access_config()}
+        #{access => capi_auth_legacy:get_access_config()}
     ).
 
 get_authorization_config() ->

@@ -7,6 +7,8 @@
     bin = <<"532130">>,
     last_digits = <<"7892">>
 }).
+-define(TEST_USER_REALM, <<"external">>).
+-define(TEST_RULESET_ID, <<"test/api">>).
 
 -define(BANK_NAME, <<"SAVINGS BANK OF THE GLORIOUS RUSSIAN FEDERATION">>).
 

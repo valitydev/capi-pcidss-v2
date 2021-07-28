@@ -68,12 +68,14 @@ end_per_suite(C) ->
 init_per_group(stream_handler_tests, Config) ->
     Token = capi_ct_helper:issue_token([{[payment_resources], write}], unlimited),
     Context = capi_ct_helper:get_context(Token),
+
     [{context, Context} | Config];
 init_per_group(_, Config) ->
     Config.
 
 -spec end_per_group(group_name(), config()) -> _.
-end_per_group(_Group, _C) ->
+end_per_group(_Group, C) ->
+    _ = capi_utils:maybe(?config(group_test_sup, C), fun capi_ct_helper:stop_mocked_service_sup/1),
     ok.
 
 -spec init_per_testcase(test_case_name(), config()) -> config().
