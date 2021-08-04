@@ -109,6 +109,7 @@ handle_function_(OperationID, Req, SwagContext0, _HandlerOpts) ->
         WoodyContext = put_user_identity(WoodyContext0, get_auth_context(SwagContext)),
 
         Context = create_processing_context(OperationID, SwagContext, WoodyContext),
+        ok = set_context_meta(Context),
         {ok, RequestState} = prepare(OperationID, Req, Context, get_handlers()),
         #{authorize := Authorize, process := Process} = RequestState,
         {ok, Resolution} = Authorize(),
@@ -232,6 +233,16 @@ process_general_error(Class, Reason, Stacktrace, OperationID, Req, SwagContext) 
         }
     ),
     {error, server_error(500)}.
+
+-spec set_context_meta(processing_context()) -> ok.
+set_context_meta(Context) ->
+    AuthContext = capi_handler_utils:get_auth_context(Context),
+    Meta = #{
+        metadata => #{
+            'user-identity' => capi_auth:get_subject_data(AuthContext)
+        }
+    },
+    scoper:add_meta(Meta).
 
 -spec set_request_meta(operation_id(), request_data()) -> ok.
 set_request_meta(OperationID, Req) ->

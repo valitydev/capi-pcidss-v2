@@ -2,6 +2,7 @@
 
 -export([get_consumer/1]).
 -export([get_subject_id/1]).
+-export([get_subject_data/1]).
 -export([get_subject_email/1]).
 -export([get_subject_name/1]).
 
@@ -45,6 +46,13 @@ get_subject_id(?authorized(#{auth_data := AuthData})) ->
     end;
 get_subject_id(?authorized(#{legacy := Context})) ->
     capi_auth_legacy:get_subject_id(Context).
+
+-spec get_subject_data(auth_context()) -> #{atom() => binary()}.
+get_subject_data(?authorized(#{auth_data := AuthData})) ->
+    genlib_map:compact(#{
+        user_id => tk_auth_data:get_user_id(AuthData),
+        party_id => tk_auth_data:get_party_id(AuthData)
+    }).
 
 -spec get_subject_email(auth_context()) -> binary() | undefined.
 get_subject_email(?authorized(#{auth_data := AuthData})) ->

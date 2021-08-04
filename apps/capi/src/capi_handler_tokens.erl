@@ -194,17 +194,7 @@ get_peer_info(#{swagger_context := #{peer := Peer}}) ->
     Peer.
 
 get_replacement_ip(ClientInfo) ->
-    case maps:find(<<"ip">>, ClientInfo) of
-        {ok, UncheckedIP} ->
-            validate_ip(UncheckedIP);
-        error ->
-            undefined
-    end.
-
-validate_ip(IP) ->
-    % placeholder so far.
-    % we could want to check whether client's ip is valid and corresponds IPv4 inside IPv6 standart
-    IP.
+    maps:get(<<"ip">>, ClientInfo, undefined).
 
 %%
 
