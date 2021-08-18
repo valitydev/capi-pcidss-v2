@@ -17,7 +17,8 @@ allowed_origins(_Req, State) ->
 
 -spec allowed_headers(cowboy_req:req(), any()) -> {[binary()], any()}.
 allowed_headers(_Req, State) ->
-    {[
+    {
+        [
             <<"access-control-allow-headers">>,
             <<"x-requested-with">>,
             <<"content-type">>,
@@ -26,7 +27,8 @@ allowed_headers(_Req, State) ->
             <<"x-request-id">>,
             <<"x-request-deadline">>
         ],
-        State}.
+        State
+    }.
 
 -spec allowed_methods(cowboy_req:req(), any()) -> {[binary()], any()}.
 allowed_methods(_Req, State) ->
