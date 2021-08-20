@@ -2,6 +2,7 @@
 
 -include_lib("common_test/include/ct.hrl").
 -include_lib("capi_dummy_data.hrl").
+-include_lib("capi_tk_data.hrl").
 -include_lib("damsel/include/dmsl_domain_config_thrift.hrl").
 
 -export([init_suite/2]).
@@ -139,7 +140,15 @@ start_capi(Config, ExtraEnv) ->
                 {validation, #{
                     now => {{2020, 3, 1}, {0, 0, 0}}
                 }},
-                {payment_tool_token_lifetime, <<"1024s">>}
+                {payment_tool_token_lifetime, <<"1024s">>},
+                {auth_config, #{
+                    metadata_mappings => #{
+                        party_id => ?TK_META_PARTY_ID,
+                        token_consumer => ?TK_META_TOKEN_CONSUMER,
+                        user_id => ?TK_META_USER_ID,
+                        user_email => ?TK_META_USER_EMAIL
+                    }
+                }}
             ],
     start_app(capi_pcidss, CapiEnv).
 

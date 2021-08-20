@@ -1,6 +1,5 @@
 -module(capi_auth).
 
--export([get_consumer/1]).
 -export([get_subject_id/1]).
 -export([get_subject_data/1]).
 -export([get_subject_email/1]).
@@ -17,14 +16,12 @@
 -export_type([preauth_context/0]).
 -export_type([auth_context/0]).
 
--type consumer() :: client | merchant | provider.
-
 -type token_type() :: bearer.
 -type preauth_context() :: {unauthorized, {token_type(), token_keeper_client:token()}}.
 -type auth_context() ::
     {authorized, #{
         legacy := capi_auth_legacy:context(),
-        auth_data => tk_auth_data:auth_data()
+        auth_data => token_keeper_auth_data:auth_data()
     }}.
 
 -type resolution() ::
@@ -36,13 +33,15 @@
 -define(authorized(Ctx), {authorized, Ctx}).
 -define(unauthorized(Ctx), {unauthorized, Ctx}).
 
+-define(APP, capi_pcidss).
+
 -spec get_subject_id(auth_context()) -> binary() | undefined.
 get_subject_id(?authorized(#{auth_data := AuthData})) ->
-    case tk_auth_data:get_party_id(AuthData) of
+    case get_party_id(AuthData) of
         PartyId when is_binary(PartyId) ->
             PartyId;
         undefined ->
-            tk_auth_data:get_user_id(AuthData)
+            get_user_id(AuthData)
     end;
 get_subject_id(?authorized(#{legacy := Context})) ->
     capi_auth_legacy:get_subject_id(Context).
@@ -50,13 +49,13 @@ get_subject_id(?authorized(#{legacy := Context})) ->
 -spec get_subject_data(auth_context()) -> #{atom() => binary()}.
 get_subject_data(?authorized(#{auth_data := AuthData})) ->
     genlib_map:compact(#{
-        user_id => tk_auth_data:get_user_id(AuthData),
-        party_id => tk_auth_data:get_party_id(AuthData)
+        user_id => get_user_id(AuthData),
+        party_id => get_party_id(AuthData)
     }).
 
 -spec get_subject_email(auth_context()) -> binary() | undefined.
 get_subject_email(?authorized(#{auth_data := AuthData})) ->
-    tk_auth_data:get_user_email(AuthData);
+    get_user_email(AuthData);
 get_subject_email(?authorized(#{legacy := Context})) ->
     capi_auth_legacy:get_subject_email(Context).
 
@@ -66,14 +65,6 @@ get_subject_name(?authorized(#{auth_data := _AuthData})) ->
     undefined;
 get_subject_name(?authorized(#{legacy := Context})) ->
     capi_auth_legacy:get_subject_name(Context).
-
--spec get_consumer(uac:claims()) -> consumer().
-get_consumer(Claims) ->
-    case maps:get(<<"cons">>, Claims, <<"merchant">>) of
-        <<"merchant">> -> merchant;
-        <<"client">> -> client;
-        <<"provider">> -> provider
-    end.
 
 -spec preauthorize_api_key(swag_server:api_key()) -> {ok, preauth_context()} | {error, _Reason}.
 preauthorize_api_key(ApiKey) ->
@@ -162,7 +153,12 @@ handle_auth_result(OldRes, NewRes) ->
 do_authorize_operation(_, undefined, _) ->
     undefined;
 do_authorize_operation(Prototypes, AuthData, #{swagger_context := ReqCtx, woody_context := WoodyCtx}) ->
-    FragmentsAcc = capi_bouncer:gather_context_fragments(AuthData, ReqCtx, WoodyCtx),
+    FragmentsAcc = capi_bouncer:gather_context_fragments(
+        get_token_keeper_fragment(AuthData),
+        get_user_id(AuthData),
+        ReqCtx,
+        WoodyCtx
+    ),
     Fragments = capi_bouncer_context:build(Prototypes, FragmentsAcc, WoodyCtx),
     try
         capi_bouncer:judge(Fragments, WoodyCtx)
@@ -176,3 +172,27 @@ do_authorize_operation(Prototypes, AuthData, #{swagger_context := ReqCtx, woody_
             % * capi starts depending on bouncer exclusively for authz decisions.
             undefined
     end.
+
+get_token_keeper_fragment(AuthData) ->
+    token_keeper_auth_data:get_context_fragment(AuthData).
+
+%%
+
+get_party_id(AuthData) ->
+    get_metadata(get_metadata_mapped_key(party_id), token_keeper_auth_data:get_metadata(AuthData)).
+
+get_user_id(AuthData) ->
+    get_metadata(get_metadata_mapped_key(user_id), token_keeper_auth_data:get_metadata(AuthData)).
+
+get_user_email(AuthData) ->
+    get_metadata(get_metadata_mapped_key(user_email), token_keeper_auth_data:get_metadata(AuthData)).
+
+get_metadata(Key, Metadata) ->
+    maps:get(Key, Metadata, undefined).
+
+get_metadata_mapped_key(Key) ->
+    maps:get(Key, get_meta_mappings()).
+
+get_meta_mappings() ->
+    AuthConfig = genlib_app:env(?APP, auth_config),
+    maps:get(metadata_mappings, AuthConfig).
