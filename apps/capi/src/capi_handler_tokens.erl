@@ -79,7 +79,6 @@ prepare(_OperationID, _Req, _Context) ->
 process_request('CreatePaymentResource' = OperationID, Req, Context, Resolution) ->
     Params = maps:get('PaymentResourceParams', Req),
     ClientInfo0 = maps:get(<<"clientInfo">>, Params),
-
     ClientIP =
         case handle_auth_result(Resolution) of
             {restricted, ip_replacement_forbidden} ->
@@ -92,8 +91,9 @@ process_request('CreatePaymentResource' = OperationID, Req, Context, Resolution)
         end,
 
     ClientInfo = maps:put(<<"ip">>, ClientIP, ClientInfo0),
-
     try
+        ClientUrl = get_client_url(ClientInfo),
+        ok = validate_url(ClientUrl),
         Data = maps:get(<<"paymentTool">>, Params),
         PartyID = capi_handler_utils:get_party_id(Context),
         ExternalID = maps:get(<<"externalID">>, Params, undefined),
@@ -195,6 +195,20 @@ get_peer_info(#{swagger_context := #{peer := Peer}}) ->
 
 get_replacement_ip(ClientInfo) ->
     maps:get(<<"ip">>, ClientInfo, undefined).
+
+get_client_url(ClientInfo) ->
+    maps:get(<<"url">>, ClientInfo, undefined).
+
+validate_url(undefined) ->
+    ok;
+validate_url(Url) ->
+    case capi_utils:validate_url(Url) of
+        ok ->
+            ok;
+        {error, Error, Description} ->
+            _ = logger:notice("Unexpected client info url reason: ~p ~p", [Error, Description]),
+            throw({ok, logic_error(invalidRequest, <<"Client info url is invalid">>)})
+    end.
 
 %%
 

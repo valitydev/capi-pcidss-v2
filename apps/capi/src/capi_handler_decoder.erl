@@ -97,7 +97,8 @@ decode_client_info(undefined) ->
 decode_client_info(ClientInfo) ->
     #{
         <<"fingerprint">> => ClientInfo#domain_ClientInfo.fingerprint,
-        <<"ip">> => ClientInfo#domain_ClientInfo.ip_address
+        <<"ip">> => ClientInfo#domain_ClientInfo.ip_address,
+        <<"url">> => ClientInfo#domain_ClientInfo.url
     }.
 
 %%
