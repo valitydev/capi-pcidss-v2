@@ -2,7 +2,7 @@
 
 -include_lib("common_test/include/ct.hrl").
 -include_lib("capi_dummy_data.hrl").
--include_lib("capi_tk_data.hrl").
+-include_lib("capi_token_keeper_data.hrl").
 -include_lib("damsel/include/dmsl_domain_config_thrift.hrl").
 
 -export([init_suite/2]).
@@ -11,9 +11,7 @@
 -export([start_app/2]).
 -export([start_capi/1]).
 -export([start_capi/2]).
--export([issue_token/2]).
--export([issue_token/3]).
--export([issue_token/4]).
+-export([issue_token/1]).
 -export([get_context/1]).
 -export([get_context/2]).
 -export([get_keysource/2]).
@@ -85,8 +83,9 @@ init_suite(Module, Config, CapiEnv) ->
             {cache_update_interval, 50000}
         ]),
     Capi = start_capi(Config, CapiEnv),
+    TokenKeeperApp = start_token_keeper(SupPid, Config),
     BouncerApp = capi_ct_helper_bouncer:mock_client(SupPid),
-    Apps = lists:reverse(Capi ++ DmtClient ++ WoodyApp ++ ScoperApp ++ BouncerApp),
+    Apps = lists:reverse(Capi ++ DmtClient ++ WoodyApp ++ ScoperApp ++ BouncerApp ++ TokenKeeperApp),
     [{apps, Apps}, {suite_test_sup, SupPid} | Config].
 
 -spec start_app(app_name()) -> [app_name()].
@@ -105,6 +104,11 @@ start_app(AppName) ->
 start_app(AppName, Env) ->
     genlib_app:start_application_with(AppName, Env).
 
+-spec start_token_keeper(pid(), config()) -> [app_name()].
+start_token_keeper(SupPid, Config) ->
+    ok = capi_ct_helper_token_keeper:configure_uac(Config),
+    capi_ct_helper_token_keeper:mock_client(capi_ct_helper_token_keeper:user_session_handler(), SupPid).
+
 -spec start_capi(config()) -> [app_name()].
 start_capi(Config) ->
     start_capi(Config, []).
@@ -120,19 +124,6 @@ start_capi(Config, ExtraEnv) ->
                 {port, ?CAPI_PORT},
                 {service_type, real},
                 {bouncer_ruleset_id, ?TEST_RULESET_ID},
-                {access_conf, #{
-                    jwt => #{
-                        keyset => #{
-                            capi_pcidss => #{
-                                source => {pem_file, get_keysource("keys/local/private.pem", Config)},
-                                metadata => #{
-                                    auth_method => user_session_token,
-                                    user_realm => <<"external">>
-                                }
-                            }
-                        }
-                    }
-                }},
                 {lechiffre_opts, #{
                     encryption_source => JwkPublSource,
                     decryption_sources => [JwkPrivSource]
@@ -156,36 +147,21 @@ start_capi(Config, ExtraEnv) ->
 get_keysource(Key, Config) ->
     filename:join(?config(data_dir, Config), Key).
 
--spec issue_token(_, _) -> binary() | no_return().
-issue_token(ACL, LifeTime) ->
-    issue_token(?STRING, ACL, LifeTime, #{}).
-
--spec issue_token(_, _, _) -> binary() | no_return().
-issue_token(PartyID, ACL, LifeTime) ->
-    issue_token(PartyID, ACL, LifeTime, #{}).
-
--spec issue_token(_, _, _, _) -> binary() | no_return().
-issue_token(PartyID, ACL, LifeTime, ExtraProperties) ->
-    Claims = maps:merge(
-        #{
-            ?STRING => ?STRING,
-            <<"exp">> => LifeTime,
-            <<"email">> => <<"bla@bla.ru">>,
-            <<"resource_access">> => #{
-                <<"common-api">> => uac_acl:from_list(ACL)
-            }
-        },
-        ExtraProperties
-    ),
-    UniqueId = get_unique_id(),
-    genlib:unwrap(
-        uac_authorizer_jwt:issue(
-            UniqueId,
-            PartyID,
-            Claims,
-            capi_pcidss
-        )
-    ).
+-spec issue_token(_) -> binary() | no_return().
+issue_token(unlimited) ->
+    <<
+        "eyJhbGciOiJQUzI1NiIsImtpZCI6Il90a1hzNWlBYXNIckhpb21tMlNaaGtvR2tMdmZXcllaMkZ0bnZ2VDhFSnMiLCJ0eXAi"
+        "OiJKV1QifQ.eyJURVNUIjoiVEVTVCIsImVtYWlsIjoiYmxhQGJsYS5ydSIsImV4cCI6MCwianRpIjoiVEVTVCIsInJlc291c"
+        "mNlX2FjY2VzcyI6eyJjb21tb24tYXBpIjp7InJvbGVzIjpbInBheW1lbnRfcmVzb3VyY2VzOndyaXRlIl19fSwic3ViIjoiV"
+        "EVTVCJ9.I0RPu_ESO3HQJsWjhuVEpvpOZat9Vz6K_NzNzjAss5RNQVd-uf4Opc493rGfxtfsIMUdZtb0Pu-6Fz_SH-YuzA"
+    >>;
+issue_token(_LifeTime) ->
+    <<
+        "eyJhbGciOiJQUzI1NiIsImtpZCI6Il90a1hzNWlBYXNIckhpb21tMlNaaGtvR2tMdmZXcllaMkZ0bnZ2VDhFSnMiLCJ0eXAiO"
+        "iJKV1QifQ.eyJURVNUIjoiVEVTVCIsImVtYWlsIjoiYmxhQGJsYS5ydSIsImV4cCI6NDEwMjQ0NDgwMCwianRpIjoiVEVTVCI"
+        "sInJlc291cmNlX2FjY2VzcyI6eyJjb21tb24tYXBpIjp7InJvbGVzIjpbInBheW1lbnRfcmVzb3VyY2VzOndyaXRlIl19fSwi"
+        "c3ViIjoiVEVTVCJ9.FNuU3vsMLC_Y2HjXVP-tCBYrU2o_3alqlvijHOOGO7tqR5N5BlbKL96C5erufDv1wVxlB7istvg8X4iRShFkEw"
+    >>.
 
 -spec get_unique_id() -> binary().
 get_unique_id() ->

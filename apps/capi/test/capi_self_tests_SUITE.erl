@@ -66,9 +66,8 @@ end_per_suite(C) ->
 
 -spec init_per_group(group_name(), config()) -> config().
 init_per_group(stream_handler_tests, Config) ->
-    Token = capi_ct_helper:issue_token([{[payment_resources], write}], unlimited),
+    Token = capi_ct_helper:issue_token(unlimited),
     Context = capi_ct_helper:get_context(Token),
-
     [{context, Context} | Config];
 init_per_group(_, Config) ->
     Config.

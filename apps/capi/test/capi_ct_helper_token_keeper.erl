@@ -1,11 +1,12 @@
--module(capi_ct_helper_tk).
+-module(capi_ct_helper_token_keeper).
 
 -include_lib("token_keeper_proto/include/tk_token_keeper_thrift.hrl").
 -include_lib("token_keeper_proto/include/tk_context_thrift.hrl").
 
--include_lib("capi_tk_data.hrl").
+-include_lib("capi_token_keeper_data.hrl").
 
--export([mock_service/2]).
+-export([configure_uac/1]).
+-export([mock_client/2]).
 
 -export([not_found_handler/0]).
 
@@ -16,6 +17,30 @@
 -export([customer_access_token/2]).
 
 -export([make_handler_fun/3]).
+
+% TODO ED-208
+% При стабилизации api создания токенов в token keeper - следует удалить uac и ключи.
+% Сейчас они необходимы тут для распаковки legacy токенов заданных в capi_ct_helper:issue_token
+-spec configure_uac(list(tuple())) -> ok.
+configure_uac(Config) ->
+    _ = genlib_app:start_application(uac),
+    uac:configure(#{
+        access => #{
+            domain_name => <<"common-api">>,
+            resource_hierarchy => #{payment_resources => #{}}
+        },
+        jwt => #{
+            keyset => #{
+                capi_pcidss => #{
+                    source => {pem_file, capi_ct_helper:get_keysource("keys/local/private.pem", Config)},
+                    metadata => #{
+                        auth_method => user_session_token,
+                        user_realm => <<"external">>
+                    }
+                }
+            }
+        }
+    }).
 
 -dialyzer({no_return, not_found_handler/0}).
 -spec not_found_handler() -> handler_fun().
@@ -107,9 +132,9 @@ make_handler_fun(Authority, ContextSpec, MetadataSpec) ->
                 AuthData = #token_keeper_AuthData{
                     token = Token,
                     status = active,
-                    context = encode_context(get_context(TokenInfo, ContextSpec)),
+                    context = encode_context(create_context(TokenInfo, ContextSpec)),
                     authority = Authority,
-                    metadata = get_metadata(TokenInfo, MetadataSpec)
+                    metadata = create_metadata(TokenInfo, MetadataSpec)
                 },
                 {ok, AuthData};
             {error, Error} ->
@@ -120,8 +145,8 @@ make_handler_fun(Authority, ContextSpec, MetadataSpec) ->
 
 %%
 
--spec mock_service(_, _) -> _.
-mock_service(HandlerFun, SupOrConfig) ->
+-spec mock_client(_, _) -> _.
+mock_client(HandlerFun, SupOrConfig) ->
     start_client(
         capi_ct_helper:mock_services_(
             [
@@ -144,27 +169,24 @@ start_client(ServiceURLs) ->
 
 %%
 
-get_context(TokenInfo, Spec) ->
-    Acc0 = bouncer_context_helpers:empty(),
-    add_by_spec(Acc0, TokenInfo, Spec).
-
-add_by_spec(Acc0, _TokenInfo, []) ->
-    Acc0;
-add_by_spec(Acc0, TokenInfo, [{user, UserSpec} | Rest]) ->
-    add_by_spec(add_user_spec(Acc0, UserSpec, TokenInfo), TokenInfo, Rest);
-add_by_spec(Acc0, TokenInfo, [{auth, AuthSpec} | Rest]) ->
-    add_by_spec(add_auth_spec(Acc0, AuthSpec, TokenInfo), TokenInfo, Rest).
-
-add_user_spec(Acc0, UserSpec, TokenInfo) ->
-    bouncer_context_helpers:add_user(
-        assemble_user_fragment(UserSpec, TokenInfo),
-        Acc0
+create_context(TokenInfo, Specs) ->
+    lists:foldl(
+        fun(Spec, Context) ->
+            add_by_spec(Spec, TokenInfo, Context)
+        end,
+        bouncer_context_helpers:empty(),
+        Specs
     ).
 
-add_auth_spec(Acc0, AuthSpec, TokenInfo) ->
+add_by_spec({user, UserSpec}, TokenInfo, Context) ->
+    bouncer_context_helpers:add_user(
+        assemble_user_fragment(UserSpec, TokenInfo),
+        Context
+    );
+add_by_spec({auth, AuthSpec}, TokenInfo, Context) ->
     bouncer_context_helpers:add_auth(
         assemble_auth_fragment(AuthSpec, TokenInfo),
-        Acc0
+        Context
     ).
 
 assemble_user_fragment(UserSpec, TokenInfo) ->
@@ -254,7 +276,7 @@ get_auth_scope_fragment_value(party, TokenInfo) ->
 get_auth_scope_fragment_value({Name, EntityID}, _TokenInfo) when is_atom(Name) ->
     #{id => EntityID}.
 
-get_metadata(TokenInfo, MetadataSpec) ->
+create_metadata(TokenInfo, MetadataSpec) ->
     lists:foldl(
         fun(SpecFragment, Acc0) ->
             maps:merge(Acc0, make_metadata_by_spec(SpecFragment, TokenInfo))

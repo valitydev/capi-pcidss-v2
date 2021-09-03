@@ -34,34 +34,7 @@ prepare('CreatePaymentResource' = OperationID, Req, Context) ->
             {operation, #{id => OperationID, party => PartyID}},
             {tokens, #{replacement_ip => ReplacementIP}}
         ],
-
-        IpReplacementAllowedOld = ip_replacement_allowed_legacy(Context),
-
-        BouncerResult = capi_auth:authorize_operation(Prototypes, Context, Req),
-
-        Result =
-            case handle_auth_result(BouncerResult) of
-                allowed when ReplacementIP /= undefined, not IpReplacementAllowedOld ->
-                    logger:warning(
-                        "Request fully allowed, yet IP replacement was forbidden " ++
-                            "in old version: restricting replacement"
-                    ),
-                    {restricted, #brstn_Restrictions{
-                        capi = #brstn_RestrictionsCommonAPI{
-                            ip_replacement_forbidden = true
-                        }
-                    }};
-                {restricted, ip_replacement_forbidden} when ReplacementIP /= undefined, IpReplacementAllowedOld ->
-                    logger:warning(
-                        "Request was restricted with IP replacement, yet it " ++
-                            " was allowed in old version: allowing request and replacement"
-                    ),
-                    allowed;
-                _ ->
-                    BouncerResult
-            end,
-
-        {ok, Result}
+        {ok, capi_auth:authorize_operation(Prototypes, Context, Req)}
     end,
     Process = fun(Resolution) ->
         process_request(OperationID, Req, Context, Resolution)
@@ -80,7 +53,7 @@ process_request('CreatePaymentResource' = OperationID, Req, Context, Resolution)
     Params = maps:get('PaymentResourceParams', Req),
     ClientInfo0 = maps:get(<<"clientInfo">>, Params),
     ClientIP =
-        case handle_auth_result(Resolution) of
+        case flatten_resolution_decision(Resolution) of
             {restricted, ip_replacement_forbidden} ->
                 prepare_requester_ip(Context);
             allowed ->
@@ -159,24 +132,9 @@ payment_tool_token_deadline() ->
 
 %%
 
-ip_replacement_allowed_legacy(Context) ->
-    LegacyContext = capi_auth:get_legacy_context(capi_auth:extract_auth_context(Context)),
-
-    case uac_authorizer_jwt:get_claim(<<"ip_replacement_allowed">>, LegacyContext, false) of
-        NonBull when not is_boolean(NonBull) ->
-            _ = logger:notice("Unexpected ip_replacement_allowed value: ~p", [NonBull]),
-            NonBull;
-        Bool ->
-            Bool
-    end.
-
-handle_auth_result(allowed) ->
+flatten_resolution_decision(allowed) ->
     allowed;
-handle_auth_result(forbidden) ->
-    forbidden;
-handle_auth_result({forbidden, _Reason} = Forbidden) ->
-    Forbidden;
-handle_auth_result({restricted, #brstn_Restrictions{capi = CAPI}}) ->
+flatten_resolution_decision({restricted, #brstn_Restrictions{capi = CAPI}}) ->
     case CAPI of
         #brstn_RestrictionsCommonAPI{
             ip_replacement_forbidden = true

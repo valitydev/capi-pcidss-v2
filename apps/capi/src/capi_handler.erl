@@ -120,9 +120,6 @@ handle_function_(OperationID, Req, SwagContext0, _HandlerOpts) ->
                 Process(Resolution);
             forbidden ->
                 _ = logger:info("Authorization failed"),
-                {ok, {401, #{}, undefined}};
-            {forbidden, Error} ->
-                _ = logger:info("Authorization failed due to ~p", [Error]),
                 {ok, {401, #{}, undefined}}
         end
     catch
@@ -199,8 +196,7 @@ collect_user_identity(AuthContext) ->
     genlib_map:compact(#{
         id => capi_auth:get_subject_id(AuthContext),
         realm => ?REALM,
-        email => capi_auth:get_subject_email(AuthContext),
-        username => capi_auth:get_subject_name(AuthContext)
+        email => capi_auth:get_subject_email(AuthContext)
     }).
 
 attach_deadline(#{'X-Request-Deadline' := undefined}, Context) ->

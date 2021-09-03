@@ -27,12 +27,13 @@ init([]) ->
     LechiffreSpec = lechiffre:child_spec(lechiffre, LechiffreOpts),
     {LogicHandler, LogicHandlerSpecs} = get_logic_handler_info(),
     AdditionalRoutes = [
-        {'_', [get_prometheus_route(), erl_health_handle:get_route(genlib_app:env(capi_pcidss, health_check, #{}))]}
+        {'_', [
+            get_prometheus_route(),
+            erl_health_handle:get_route(genlib_app:env(capi_pcidss, health_check, #{}))
+        ]}
     ],
     SwaggerHandlerOpts = genlib_app:env(?APP, swagger_handler_opts, #{}),
     SwaggerSpec = capi_swagger_server:child_spec({AdditionalRoutes, LogicHandler, SwaggerHandlerOpts}),
-    UacConf = get_uac_config(),
-    ok = uac:configure(UacConf),
     {ok, {
         {one_for_all, 0, 1},
         [LechiffreSpec] ++ LogicHandlerSpecs ++ [SwaggerSpec]
@@ -49,18 +50,4 @@ get_logic_handler_info() ->
             {capi_handler, []};
         undefined ->
             exit(undefined_service_type)
-    end.
-
-get_uac_config() ->
-    maps:merge(
-        get_authorization_config(),
-        #{access => capi_auth_legacy:get_access_config()}
-    ).
-
-get_authorization_config() ->
-    case genlib_app:env(capi_pcidss, access_conf) of
-        undefined ->
-            exit(undefined_access_configuration);
-        Config ->
-            Config
     end.

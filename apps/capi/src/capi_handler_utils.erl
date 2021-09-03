@@ -10,7 +10,6 @@
 -export([service_call/2]).
 
 -export([get_auth_context/1]).
--export([get_extra_properties/1]).
 
 -export([get_party_id/1]).
 
@@ -98,10 +97,6 @@ service_call({ServiceName, Function, Args}, #{woody_context := WoodyContext}) ->
 -spec get_auth_context(processing_context()) -> any().
 get_auth_context(#{swagger_context := #{auth_context := AuthContext}}) ->
     AuthContext.
-
--spec get_extra_properties(processing_context()) -> map().
-get_extra_properties(Context) ->
-    uac_authorizer_jwt:get_claims(get_auth_context(Context)).
 
 %% Utils
 

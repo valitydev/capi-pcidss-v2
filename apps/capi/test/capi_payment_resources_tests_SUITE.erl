@@ -43,15 +43,15 @@
     create_googlepay_tokenized_payment_resource_ok_test/1,
     create_googlepay_plain_payment_resource_ok_test/1,
     create_yandexpay_tokenized_payment_resource_ok_test/1,
-    ip_replacement_not_allowed_test/1,
     ip_replacement_allowed_test/1,
+    ip_replacement_restricted_test/1,
 
     authorization_positive_lifetime_ok_test/1,
     authorization_unlimited_lifetime_ok_test/1,
     authorization_far_future_deadline_ok_test/1,
     authorization_error_no_header_test/1,
-    authorization_error_no_permission_test/1,
     authorization_bad_token_error_test/1,
+    authorization_error_no_permission_test/1,
 
     valid_until_payment_resource_test/1,
     check_support_decrypt_v2_test/1
@@ -92,10 +92,7 @@ init([]) ->
 -spec all() -> [{group, test_case_name()}].
 all() ->
     [
-        {group, payment_resources},
-        {group, ip_replacement_allowed},
-        {group, ip_replacement_legacy_allowed},
-        {group, ip_replacement_legacy_forbidden}
+        {group, payment_resources}
     ].
 
 -spec groups() -> [{group_name(), list(), [test_case_name()]}].
@@ -122,26 +119,18 @@ groups() ->
             create_googlepay_tokenized_payment_resource_ok_test,
             create_googlepay_plain_payment_resource_ok_test,
             create_yandexpay_tokenized_payment_resource_ok_test,
-            ip_replacement_not_allowed_test,
+            ip_replacement_allowed_test,
+            ip_replacement_restricted_test,
 
             authorization_positive_lifetime_ok_test,
             authorization_unlimited_lifetime_ok_test,
             authorization_far_future_deadline_ok_test,
             authorization_error_no_header_test,
-            authorization_error_no_permission_test,
             authorization_bad_token_error_test,
+            authorization_error_no_permission_test,
 
             valid_until_payment_resource_test,
             check_support_decrypt_v2_test
-        ]},
-        {ip_replacement_allowed, [], [
-            ip_replacement_allowed_test
-        ]},
-        {ip_replacement_legacy_allowed, [], [
-            ip_replacement_allowed_test
-        ]},
-        {ip_replacement_legacy_forbidden, [], [
-            ip_replacement_not_allowed_test
         ]}
     ].
 
@@ -149,12 +138,12 @@ groups() ->
 %% starting/stopping
 %%
 -spec init_per_suite(config()) -> config().
-init_per_suite(Config) ->
-    _ = dbg:tracer(),
-    _ = dbg:p(all, c),
-    _ = dbg:tpl({'capi_payment_resources_tests_SUITE', 'p', '_'}, x),
-    _ = dbg:tpl({'capi_handler_tokens', 'p', '_'}, x),
-    capi_ct_helper:init_suite(?MODULE, Config).
+init_per_suite(C) ->
+    % _ = dbg:tracer(),
+    % _ = dbg:p(all, c),
+    % _ = dbg:tpl({'capi_payment_resources_tests_SUITE', 'p', '_'}, x),
+    % _ = dbg:tpl({'capi_handler_tokens', 'p', '_'}, x),
+    capi_ct_helper:init_suite(?MODULE, C).
 
 -spec end_per_suite(config()) -> _.
 end_per_suite(C) ->
@@ -163,52 +152,30 @@ end_per_suite(C) ->
     ok.
 
 -spec init_per_group(group_name(), config()) -> config().
-init_per_group(payment_resources, Config) ->
-    Token = capi_ct_helper:issue_token([{[payment_resources], write}], unlimited),
-
-    [{context, capi_ct_helper:get_context(Token)} | start_group_apps(Config)];
-init_per_group(ip_replacement_allowed, Config) ->
-    ExtraProperties = #{<<"ip_replacement_allowed">> => true},
-    Token = capi_ct_helper:issue_token(?STRING, [{[payment_resources], write}], unlimited, ExtraProperties),
-
-    [{context, capi_ct_helper:get_context(Token)} | start_group_apps(Config)];
-init_per_group(ip_replacement_legacy_allowed, Config) ->
-    ExtraProperties = #{<<"ip_replacement_allowed">> => true},
-    Token = capi_ct_helper:issue_token(?STRING, [{[payment_resources], write}], unlimited, ExtraProperties),
-
-    JudgeFun = capi_ct_helper_bouncer:judge_always_restricted(
-        #brstn_Restrictions{
-            capi = #brstn_RestrictionsCommonAPI{
-                ip_replacement_forbidden = true
-            }
-        }
-    ),
-
-    [{context, capi_ct_helper:get_context(Token)} | start_group_apps(Config, JudgeFun)];
-init_per_group(ip_replacement_legacy_forbidden, Config) ->
-    Token = capi_ct_helper:issue_token(?STRING, [{[payment_resources], write}], unlimited),
-
-    [
-        {context, capi_ct_helper:get_context(Token)}
-        | start_group_apps(Config, capi_ct_helper_bouncer:judge_always_forbidden())
-    ].
-
-start_group_apps(Config) ->
-    start_group_apps(Config, capi_ct_helper_bouncer:judge_always_allowed()).
-start_group_apps(Config, JudgeFun) ->
-    SupPid = capi_ct_helper:start_mocked_service_sup(?MODULE),
-    Apps0 = capi_ct_helper_bouncer:mock_arbiter(JudgeFun, SupPid),
-    Apps1 = capi_ct_helper_tk:mock_service(capi_ct_helper_tk:user_session_handler(), SupPid),
-    [{group_apps, Apps0 ++ Apps1} | Config].
+init_per_group(_Group, C) ->
+    Token = capi_ct_helper:issue_token(unlimited),
+    Context = capi_ct_helper:get_context(Token),
+    [{context, Context} | C].
 
 -spec end_per_group(group_name(), config()) -> _.
 end_per_group(_Group, C) ->
     _ = capi_utils:maybe(?config(group_test_sup, C), fun capi_ct_helper:stop_mocked_service_sup/1),
-    proplists:delete(context, C).
+    ok.
 
 -spec init_per_testcase(test_case_name(), config()) -> config().
+init_per_testcase(authorization_error_no_permission_test, C) ->
+    SupPid = capi_ct_helper:start_mocked_service_sup(?MODULE),
+    _ = capi_ct_helper_bouncer:mock_arbiter(capi_ct_helper_bouncer:judge_always_forbidden(), SupPid),
+    [{test_sup, SupPid} | C];
+init_per_testcase(ip_replacement_restricted_test, C) ->
+    SupPid = capi_ct_helper:start_mocked_service_sup(?MODULE),
+    Restriction = #brstn_Restrictions{capi = #brstn_RestrictionsCommonAPI{ip_replacement_forbidden = true}},
+    _ = capi_ct_helper_bouncer:mock_arbiter(capi_ct_helper_bouncer:judge_always_restricted(Restriction), SupPid),
+    [{test_sup, SupPid} | C];
 init_per_testcase(_Name, C) ->
-    [{test_sup, capi_ct_helper:start_mocked_service_sup(?MODULE)} | C].
+    SupPid = capi_ct_helper:start_mocked_service_sup(?MODULE),
+    _ = capi_ct_helper_bouncer:mock_arbiter(capi_ct_helper_bouncer:judge_always_allowed(), SupPid),
+    [{test_sup, SupPid} | C].
 
 -spec end_per_testcase(test_case_name(), config()) -> config().
 end_per_testcase(_Name, C) ->
@@ -996,10 +963,22 @@ create_yandexpay_tokenized_payment_resource_ok_test(Config) ->
 
 %%
 
--spec ip_replacement_not_allowed_test(_) -> _.
-ip_replacement_not_allowed_test(Config) ->
-    % In this case we have no ip_replacement_allowed field,
-    % perhaps we could also test token with this field set to false
+-spec ip_replacement_allowed_test(_) -> _.
+ip_replacement_allowed_test(Config) ->
+    ClientIP = <<"::ffff:42.42.42.42">>,
+    ClientInfo = #{<<"fingerprint">> => <<"test fingerprint">>, <<"ip">> => ClientIP},
+    {ok, Res} = capi_client_tokens:create_payment_resource(?config(context, Config), #{
+        <<"paymentTool">> => #{
+            <<"paymentToolType">> => <<"DigitalWalletData">>,
+            <<"digitalWalletType">> => <<"DigitalWalletQIWI">>,
+            <<"phoneNumber">> => <<"+79876543210">>
+        },
+        <<"clientInfo">> => ClientInfo
+    }),
+    ?assertEqual(ClientIP, maps:get(<<"ip">>, maps:get(<<"clientInfo">>, Res))).
+
+-spec ip_replacement_restricted_test(_) -> _.
+ip_replacement_restricted_test(Config) ->
     ClientIP = <<"::ffff:42.42.42.42">>,
     ClientInfo = #{<<"fingerprint">> => <<"test fingerprint">>, <<"ip">> => ClientIP},
     {ok, Res} = capi_client_tokens:create_payment_resource(?config(context, Config), #{
@@ -1016,21 +995,6 @@ ip_replacement_not_allowed_test(Config) ->
         _ ->
             ok
     end.
-
--spec ip_replacement_allowed_test(_) -> _.
-ip_replacement_allowed_test(Config) ->
-    ClientIP = <<"::ffff:42.42.42.42">>,
-    ClientInfo = #{<<"fingerprint">> => <<"test fingerprint">>, <<"ip">> => ClientIP},
-    {ok, Res} = capi_client_tokens:create_payment_resource(?config(context, Config), #{
-        <<"paymentTool">> => #{
-            <<"paymentToolType">> => <<"DigitalWalletData">>,
-            <<"digitalWalletType">> => <<"DigitalWalletQIWI">>,
-            <<"phoneNumber">> => <<"+79876543210">>
-        },
-        <<"clientInfo">> => ClientInfo
-    }),
-    ClientIP = maps:get(<<"ip">>, maps:get(<<"clientInfo">>, Res)).
-
 %%
 
 -spec authorization_positive_lifetime_ok_test(config()) -> _.
@@ -1046,7 +1010,7 @@ authorization_positive_lifetime_ok_test(Config) ->
         ],
         Config
     ),
-    Token = capi_ct_helper:issue_token([{[payment_resources], write}], ?DISTANT_TIMESTAMP),
+    Token = capi_ct_helper:issue_token(?DISTANT_TIMESTAMP),
     {ok, _} = capi_client_tokens:create_payment_resource(
         capi_ct_helper:get_context(Token),
         ?TEST_PAYMENT_TOOL_ARGS
@@ -1065,7 +1029,7 @@ authorization_unlimited_lifetime_ok_test(Config) ->
         ],
         Config
     ),
-    Token = capi_ct_helper:issue_token([{[payment_resources], write}], unlimited),
+    Token = capi_ct_helper:issue_token(unlimited),
     {ok, _} = capi_client_tokens:create_payment_resource(
         capi_ct_helper:get_context(Token),
         ?TEST_PAYMENT_TOOL_ARGS
@@ -1085,7 +1049,7 @@ authorization_far_future_deadline_ok_test(Config) ->
         Config
     ),
     % 01/01/2100 @ 12:00am (UTC)
-    Token = capi_ct_helper:issue_token([{[payment_resources], write}], ?DISTANT_TIMESTAMP),
+    Token = capi_ct_helper:issue_token(?DISTANT_TIMESTAMP),
     {ok, _} = capi_client_tokens:create_payment_resource(
         capi_ct_helper:get_context(Token),
         ?TEST_PAYMENT_TOOL_ARGS
@@ -1099,17 +1063,17 @@ authorization_error_no_header_test(_Config) ->
         ?TEST_PAYMENT_TOOL_ARGS
     ).
 
--spec authorization_error_no_permission_test(config()) -> _.
-authorization_error_no_permission_test(_Config) ->
-    Token = capi_ct_helper:issue_token([{[payment_resources], read}], ?DISTANT_TIMESTAMP),
+-spec authorization_bad_token_error_test(config()) -> _.
+authorization_bad_token_error_test(Config) ->
+    Token = issue_dummy_token(Config),
     ?badresp(401) = capi_client_tokens:create_payment_resource(
         capi_ct_helper:get_context(Token),
         ?TEST_PAYMENT_TOOL_ARGS
     ).
 
--spec authorization_bad_token_error_test(config()) -> _.
-authorization_bad_token_error_test(Config) ->
-    Token = issue_dummy_token([{[payment_resources], write}], Config),
+-spec authorization_error_no_permission_test(config()) -> _.
+authorization_error_no_permission_test(_Config) ->
+    Token = capi_ct_helper:issue_token(?DISTANT_TIMESTAMP),
     ?badresp(401) = capi_client_tokens:create_payment_resource(
         capi_ct_helper:get_context(Token),
         ?TEST_PAYMENT_TOOL_ARGS
@@ -1158,16 +1122,11 @@ check_support_decrypt_v2_test(_Config) ->
 
 %%
 
-issue_dummy_token(ACL, Config) ->
+issue_dummy_token(Config) ->
     Claims = #{
         <<"jti">> => capi_ct_helper:get_unique_id(),
         <<"sub">> => <<"TEST">>,
-        <<"exp">> => 0,
-        <<"resource_access">> => #{
-            <<"common-api">> => #{
-                <<"roles">> => uac_acl:encode(uac_acl:from_list(ACL))
-            }
-        }
+        <<"exp">> => 0
     },
     BadPemFile = get_keysource("keys/local/dummy.pem", Config),
     BadJWK = jose_jwk:from_pem_file(BadPemFile),
