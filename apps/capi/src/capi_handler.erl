@@ -131,6 +131,9 @@ handle_function_(OperationID, Req, SwagContext0, _HandlerOpts) ->
         throw:{handler_function_clause, _OperationID} ->
             _ = logger:error("Operation ~p failed due to missing handler", [OperationID]),
             {error, {501, #{}, undefined}};
+        throw:{invalid_merchant_id, MerchandID} ->
+            _ = logger:info("Invalid merchant ID ~p", [MerchandID]),
+            {ok, logic_error(invalidRequest, <<"Invalid merchant ID">>)};
         error:{woody_error, {Source, Class, Details}} ->
             process_woody_error(Source, Class, Details);
         Class:Reason:Stacktrace ->

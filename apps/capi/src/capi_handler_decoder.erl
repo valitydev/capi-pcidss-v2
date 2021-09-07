@@ -12,7 +12,7 @@
 
 -export_type([decode_data/0]).
 
--type encrypted_token() :: capi_crypto:encrypted_token().
+-type encrypted_token() :: capi_crypto:token().
 -type decode_data() :: #{binary() => term()}.
 
 decode_payment_tool_details({bank_card, V}) ->
@@ -21,7 +21,7 @@ decode_payment_tool_details({payment_terminal, V}) ->
     decode_payment_terminal_details(V, #{<<"detailsType">> => <<"PaymentToolDetailsPaymentTerminal">>});
 decode_payment_tool_details({digital_wallet, V}) ->
     decode_digital_wallet_details(V, #{<<"detailsType">> => <<"PaymentToolDetailsDigitalWallet">>});
-decode_payment_tool_details({crypto_currency, CryptoCurrency}) ->
+decode_payment_tool_details({crypto_currency_deprecated, CryptoCurrency}) ->
     #{
         <<"detailsType">> => <<"PaymentToolDetailsCryptoWallet">>,
         <<"cryptoCurrency">> => convert_crypto_currency_to_swag(CryptoCurrency)

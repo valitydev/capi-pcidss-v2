@@ -15,7 +15,6 @@
         moneypenny,
         snowflake,
         capi_woody_client,
-        how_are_you,  % must be after ranch and before any woody usage
         scoper,
         payproc_errors,
         swag_server,
@@ -28,6 +27,7 @@
         prometheus,
         prometheus_cowboy,
         bankcard_validator,
+        bouncer_proto,
         bouncer_client,
         token_keeper_client
     ]},

@@ -154,6 +154,10 @@ unit_factor(<<"s">>) ->
     {ok, 1000};
 unit_factor(<<"m">>) ->
     {ok, 1000 * 60};
+unit_factor(<<"h">>) ->
+    {ok, 1000 * 60 * 60};
+unit_factor(<<"d">>) ->
+    {ok, 1000 * 60 * 60 * 24};
 unit_factor(_Other) ->
     {error, unknown_unit}.
 
@@ -195,13 +199,17 @@ parse_deadline_test() ->
     ?assertEqual({error, bad_deadline}, parse_deadline(<<"2017-04-19T13:56:07.53Z">>)),
     {ok, {_, _}} = parse_deadline(<<"15s">>),
     {ok, {_, _}} = parse_deadline(<<"15m">>),
-    {error, bad_deadline} = parse_deadline(<<"15h">>).
+    {ok, {_, _}} = parse_deadline(<<"15h">>),
+    {ok, {_, _}} = parse_deadline(<<"15d">>),
+    {error, bad_deadline} = parse_deadline(<<"15M">>).
 
 -spec parse_lifetime_test() -> _.
 parse_lifetime_test() ->
     {ok, 16 * 1000} = parse_lifetime(<<"16s">>),
     {ok, 32 * 60 * 1000} = parse_lifetime(<<"32m">>),
-    {error, bad_lifetime} = parse_lifetime(undefined),
-    {error, bad_lifetime} = parse_lifetime(<<"64h">>).
+    {ok, 64 * 60 * 60 * 1000} = parse_lifetime(<<"64h">>),
+    {ok, 32 * 24 * 60 * 60 * 1000} = parse_lifetime(<<"32d">>),
+    {error, bad_lifetime} = parse_lifetime(<<"64M">>),
+    {error, bad_lifetime} = parse_lifetime(undefined).
 
 -endif.

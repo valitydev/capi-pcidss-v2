@@ -29,7 +29,7 @@
     payment_system := payment_system(),
     payment_system_deprecated := dmsl_domain_thrift:'LegacyBankCardPaymentSystem'(),
     bank_name := binary(),
-    issuer_country := dmsl_domain_thrift:'Residence'() | undefined,
+    issuer_country := dmsl_domain_thrift:'CountryCode'() | undefined,
     category := binary() | undefined,
     metadata := {_MetaNS :: binary(), map()}
 }.

@@ -53,13 +53,9 @@
     authorization_bad_token_error_test/1,
     authorization_error_no_permission_test/1,
 
-    valid_until_payment_resource_test/1,
-    check_support_decrypt_v2_test/1
+    payment_token_prev_test/1,
+    payment_token_valid_until_test/1
 ]).
-
--define(CAPI_PORT, 8080).
--define(CAPI_HOST_NAME, "localhost").
--define(CAPI_URL, ?CAPI_HOST_NAME ++ ":" ++ integer_to_list(?CAPI_PORT)).
 
 %% 01/01/2100 @ 12:00am (UTC)
 -define(DISTANT_TIMESTAMP, 4102444800).
@@ -129,8 +125,8 @@ groups() ->
             authorization_bad_token_error_test,
             authorization_error_no_permission_test,
 
-            valid_until_payment_resource_test,
-            check_support_decrypt_v2_test
+            payment_token_prev_test,
+            payment_token_valid_until_test
         ]}
     ].
 
@@ -505,8 +501,8 @@ create_visa_payment_resource_idemp_ok_test(Config) ->
         <<"paymentSession">> := ToolSession,
         <<"paymentToolDetails">> := PaymentToolDetails
     }} = capi_client_tokens:create_payment_resource(?config(context, Config), Params),
-    PaymentTool1 = decrypt_payment_tool_token(PT1),
-    PaymentTool2 = decrypt_payment_tool_token(PT2),
+    PaymentTool1 = decrypt_payment_tool(PT1),
+    PaymentTool2 = decrypt_payment_tool(PT2),
     ?assertEqual(PaymentTool1, PaymentTool2).
 
 -spec create_visa_payment_resource_idemp_fail_test(_) -> _.
@@ -665,7 +661,7 @@ create_mobile_payment_resource_ok_test(Config) ->
         maps:get(<<"paymentToolDetails">>, Res)
     ),
     PaymentToolToken = maps:get(<<"paymentToolToken">>, Res),
-    {mobile_commerce, MobileCommerce} = decrypt_payment_tool_token(PaymentToolToken),
+    {mobile_commerce, MobileCommerce} = decrypt_payment_tool(PaymentToolToken),
 
     ?assertEqual(
         #domain_MobileCommerce{
@@ -761,9 +757,9 @@ create_qw_payment_resource_with_access_token_depends_on_external_id(Config) ->
     {ok, #{<<"paymentToolToken">> := TokenExtId0}} = ResultExtId0,
     {ok, #{<<"paymentToolToken">> := TokenExtId1}} = ResultExtId1,
     {ok, #{<<"paymentToolToken">> := TokenNoExtId}} = ResultNoExtId,
-    PaymentTool1 = decrypt_payment_tool_token(TokenExtId0),
-    PaymentTool2 = decrypt_payment_tool_token(TokenExtId1),
-    PaymentTool3 = decrypt_payment_tool_token(TokenNoExtId),
+    PaymentTool1 = decrypt_payment_tool(TokenExtId0),
+    PaymentTool2 = decrypt_payment_tool(TokenExtId1),
+    PaymentTool3 = decrypt_payment_tool(TokenNoExtId),
     ?assertEqual(PaymentTool1, PaymentTool2),
     ?assertNotEqual(PaymentTool1, PaymentTool3).
 
@@ -811,7 +807,7 @@ create_applepay_tokenized_payment_resource_ok_test(Config) ->
             <<"paymentTool">> => #{
                 <<"paymentToolType">> => <<"TokenizedCardData">>,
                 <<"provider">> => <<"ApplePay">>,
-                <<"merchantID">> => <<"SomeMerchantID">>,
+                <<"merchantID">> => gateway_merchant_id(),
                 <<"paymentToken">> => #{}
             },
             <<"clientInfo">> => ClientInfo
@@ -847,7 +843,7 @@ create_googlepay_tokenized_payment_resource_ok_test(Config) ->
             <<"paymentTool">> => #{
                 <<"paymentToolType">> => <<"TokenizedCardData">>,
                 <<"provider">> => <<"GooglePay">>,
-                <<"gatewayMerchantID">> => <<"SomeMerchantID">>,
+                <<"gatewayMerchantID">> => gateway_merchant_id(),
                 <<"paymentToken">> => #{}
             },
             <<"clientInfo">> => ClientInfo
@@ -891,7 +887,7 @@ create_googlepay_plain_payment_resource_ok_test(Config) ->
             <<"paymentTool">> => #{
                 <<"paymentToolType">> => <<"TokenizedCardData">>,
                 <<"provider">> => <<"GooglePay">>,
-                <<"gatewayMerchantID">> => <<"SomeMerchantID">>,
+                <<"gatewayMerchantID">> => gateway_merchant_id(),
                 <<"paymentToken">> => #{}
             },
             <<"clientInfo">> => ClientInfo
@@ -899,7 +895,7 @@ create_googlepay_plain_payment_resource_ok_test(Config) ->
     false = maps:is_key(<<"tokenProvider">>, Details),
     %% is_cvv_empty = true for GooglePay tokenized plain bank card
     %% see capi_handler_tokens:set_is_empty_cvv/2 for more info
-    {bank_card, BankCard} = decrypt_payment_tool_token(PaymentToolToken),
+    {bank_card, BankCard} = decrypt_payment_tool(PaymentToolToken),
     ?assertMatch(
         #domain_BankCard{
             payment_system_deprecated = mastercard,
@@ -939,13 +935,13 @@ create_yandexpay_tokenized_payment_resource_ok_test(Config) ->
             <<"paymentTool">> => #{
                 <<"paymentToolType">> => <<"TokenizedCardData">>,
                 <<"provider">> => <<"YandexPay">>,
-                <<"gatewayMerchantID">> => <<"SomeMerchantID">>,
+                <<"gatewayMerchantID">> => gateway_merchant_id(),
                 <<"paymentToken">> => #{}
             },
             <<"clientInfo">> => ClientInfo
         }),
     ?assertEqual(error, maps:find(<<"first6">>, Details)),
-    {ok, {PaymentTool, _Deadline}} = capi_crypto:decrypt_payment_tool_token(EncryptedToken),
+    PaymentTool = decrypt_payment_tool(EncryptedToken),
     ?assertMatch(
         {bank_card, #domain_BankCard{
             metadata = #{
@@ -1079,8 +1075,33 @@ authorization_error_no_permission_test(_Config) ->
         ?TEST_PAYMENT_TOOL_ARGS
     ).
 
--spec valid_until_payment_resource_test(_) -> _.
-valid_until_payment_resource_test(Config) ->
+-spec payment_token_prev_test(config()) -> _.
+payment_token_prev_test(_Config) ->
+    PaymentToolToken = <<
+        "v2.eyJhbGciOiJFQ0RILUVTIiwiZW5jIjoiQTEyOEdDTSIsImVwayI6eyJhbGciOiJFQ0RILUVTIiwiY3J2IjoiUC0yNTYiLCJrdHkiOi"
+        "JFQyIsInVzZSI6ImVuYyIsIngiOiJ1ODNOVXpSWGtPU2VoRlcwdktLeEk3TlU1OGhZdUhqTFNtazJ2bldPQzIwIiwieSI6IjltRjhhamc"
+        "tYXVaMUp4RlZSdHhWQTlqYU83WWppMnBZT0I2M0RYWFVUcG8ifSwia2lkIjoia3hkRDBvclZQR29BeFdycUFNVGVRMFU1TVJvSzQ3dVp4"
+        "V2lTSmRnbzB0MCJ9..9O0gWgWCFJqL3rLJ.mGgBOAPCW56d1BrpCiQCcuNU6b0ej42NGtPmwIFv-Le38-HumdAuAn56nR9xhGEmTCLWyW"
+        "thrM3N7oSkXdAVJrn0eSHQq-YxvBCqH8J-D48.SKNeKddaTRF9UKvTTbWoWw"
+    >>,
+    {ok, TokenData} = capi_crypto:decode_token(PaymentToolToken),
+    #{payment_tool := PaymentTool} = TokenData,
+    #{valid_until := ValidUntil} = TokenData,
+    ?assertEqual(
+        {mobile_commerce, #domain_MobileCommerce{
+            phone = #domain_MobilePhone{
+                cc = <<"7">>,
+                ctn = <<"9210001122">>
+            },
+            operator_deprecated = megafone
+        }},
+        PaymentTool
+    ),
+    ?assertEqual(<<"2021-08-02T11:21:15.082Z">>, capi_utils:deadline_to_binary(ValidUntil)).
+
+-spec payment_token_valid_until_test(_) -> _.
+
+payment_token_valid_until_test(Config) ->
     {ok, #{
         <<"paymentToolToken">> := PaymentToolToken,
         <<"validUntil">> := ValidUntil
@@ -1094,31 +1115,9 @@ valid_until_payment_resource_test(Config) ->
                 <<"test fingerprint">>
         }
     }),
-    {ok, {_PaymentTool, DeadlineToken}} = capi_crypto:decrypt_payment_tool_token(PaymentToolToken),
+    {ok, #{valid_until := DeadlineToken}} = capi_crypto:decode_token(PaymentToolToken),
     Deadline = capi_utils:deadline_from_binary(ValidUntil),
     ?assertEqual(Deadline, DeadlineToken).
-
--spec check_support_decrypt_v2_test(config()) -> _.
-check_support_decrypt_v2_test(_Config) ->
-    PaymentToolToken = <<
-        "v2.eyJhbGciOiJFQ0RILUVTIiwiZW5jIjoiQTEyOEdDTSIsImVwayI6eyJhbGciOiJFQ0RILUVTIiwiY3J2IjoiUC0yNTYiLCJrdHkiOi"
-        "JFQyIsInVzZSI6ImVuYyIsIngiOiJRanFmNFVrOTJGNzd3WXlEUjNqY3NwR2dpYnJfdVRmSXpMUVplNzVQb1R3IiwieSI6InA5cjJGV3F"
-        "mU2xBTFJXYWhUSk8xY3VneVZJUXVvdzRwMGdHNzFKMFJkUVEifSwia2lkIjoia3hkRDBvclZQR29BeFdycUFNVGVRMFU1TVJvSzQ3dVp4"
-        "V2lTSmRnbzB0MCJ9..j3zEyCqyfQjpEtQM.JAc3kqJm6zbn0fMZGlK_t14Yt4PvgOuoVL2DtkEgIXIqrxxWFbykKBGxQvwYisJYIUJJwt"
-        "YbwvuGEODcK2uTC2quPD2Ejew66DLJF2xcAwE.MNVimzi8r-5uTATNalgoBQ"
-    >>,
-    {ok, {PaymentTool, ValidUntil}} = capi_crypto:decrypt_payment_tool_token(PaymentToolToken),
-    ?assertEqual(
-        {mobile_commerce, #domain_MobileCommerce{
-            phone = #domain_MobilePhone{
-                cc = <<"7">>,
-                ctn = <<"9210001122">>
-            },
-            operator_deprecated = megafone
-        }},
-        PaymentTool
-    ),
-    ?assertEqual(<<"2020-10-29T23:44:15.499Z">>, capi_utils:deadline_to_binary(ValidUntil)).
 
 %%
 
@@ -1140,9 +1139,12 @@ issue_dummy_token(Config) ->
     {_Modules, Token} = jose_jws:compact(JWT),
     Token.
 
-decrypt_payment_tool_token(PaymentToolToken) ->
-    {ok, {PaymentTool, _ValidUntil}} = capi_crypto:decrypt_payment_tool_token(PaymentToolToken),
+decrypt_payment_tool(PaymentToolToken) ->
+    {ok, #{payment_tool := PaymentTool}} = capi_crypto:decode_token(PaymentToolToken),
     PaymentTool.
 
 get_keysource(Key, Config) ->
     filename:join(?config(data_dir, Config), Key).
+
+gateway_merchant_id() ->
+    <<"test:PartyID:ShopID">>.

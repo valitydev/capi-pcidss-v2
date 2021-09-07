@@ -10,10 +10,6 @@
 
 -export([authorize_operation/3]).
 
--export_type([resolution/0]).
--export_type([preauth_context/0]).
--export_type([auth_context/0]).
-
 -type token_type() :: bearer.
 -type preauth_context() :: {unauthorized, {token_type(), token_keeper_client:token()}}.
 -type auth_context() ::
@@ -22,6 +18,10 @@
     }}.
 
 -type resolution() :: bouncer_client:judgement() | undefined.
+
+-export_type([resolution/0]).
+-export_type([preauth_context/0]).
+-export_type([auth_context/0]).
 
 -define(authorized(Ctx), {authorized, Ctx}).
 -define(unauthorized(Ctx), {unauthorized, Ctx}).
