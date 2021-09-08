@@ -45,7 +45,7 @@ prepare_payment_tool_prototype(#{<<"paymentTool">> := Data}) ->
     prepare_provider_scope(Data).
 
 prepare_provider_scope(#{<<"paymentToolType">> := <<"TokenizedCardData">>} = Data) ->
-    MerchantID = decode_merchant_id(get_token_provider_merchant_id(Data)),
+    MerchantID = decode_merchant_id(get_token_provider(Data), get_token_provider_merchant_id(Data)),
     #{
         party => maps:get(party, MerchantID, undefined),
         shop => maps:get(shop, MerchantID, undefined),
@@ -328,8 +328,8 @@ put_session_to_cds(SessionID, SessionData, Context) ->
     {ok, ok} = capi_handler_utils:service_call(Call, Context),
     ok.
 
--spec decode_merchant_id(binary()) -> map().
-decode_merchant_id(Encoded) ->
+-spec decode_merchant_id(atom(), binary()) -> map().
+decode_merchant_id(TokenProvider, Encoded) ->
     case decode_merchant_id_fallback(Encoded) of
         #{} = Map ->
             Map;
@@ -340,7 +340,10 @@ decode_merchant_id(Encoded) ->
                         realm => RealmMode, party => PartyID, shop => ShopID
                     };
                 _ ->
-                    erlang:throw({invalid_merchant_id, Encoded})
+                    _ = logger:warning("invalid merchant id: ~p ~p", [TokenProvider, Encoded]),
+                    % TODO  ED-124 после отладки подсистемы переключить на исключение
+                    % erlang:throw({invalid_merchant_id, Encoded})
+                    #{}
             end
     end.
 
@@ -447,6 +450,15 @@ get_token_provider_service_name(Data) ->
             payment_tool_provider_yandex_pay
     end.
 
+get_token_provider(#{<<"provider">> := <<"ApplePay">>}) ->
+    applepay;
+get_token_provider(#{<<"provider">> := <<"GooglePay">>}) ->
+    googlepay;
+get_token_provider(#{<<"provider">> := <<"SamsungPay">>}) ->
+    samsungpay;
+get_token_provider(#{<<"provider">> := <<"YandexPay">>}) ->
+    yandexpay.
+
 get_token_provider_merchant_id(Data) ->
     case Data of
         #{<<"provider">> := <<"ApplePay">>} ->
@@ -462,8 +474,8 @@ get_token_provider_merchant_id(Data) ->
     end.
 
 encode_wrapped_payment_tool(Data) ->
-    MerchantID = get_token_provider_merchant_id(Data),
-    RealmMode = maps:get(realm, decode_merchant_id(MerchantID), undefined),
+    MerchantID = decode_merchant_id(get_token_provider(Data), get_token_provider_merchant_id(Data)),
+    RealmMode = maps:get(realm, MerchantID, undefined),
     #paytoolprv_WrappedPaymentTool{
         request = encode_payment_request(Data),
         realm = encode_realm_mode(RealmMode)
