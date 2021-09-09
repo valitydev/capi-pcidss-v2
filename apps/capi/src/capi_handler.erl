@@ -6,8 +6,9 @@
 
 %% API callbacks
 -export([authorize_api_key/4]).
--export([handle_request/4]).
 -export([map_error/2]).
+-export([handle_request/4]).
+-export([respond/1]).
 
 %% Handler behaviour
 
@@ -131,9 +132,8 @@ handle_function_(OperationID, Req, SwagContext0, _HandlerOpts) ->
         throw:{handler_function_clause, _OperationID} ->
             _ = logger:error("Operation ~p failed due to missing handler", [OperationID]),
             {error, {501, #{}, undefined}};
-        throw:{invalid_merchant_id, MerchandID} ->
-            _ = logger:info("Invalid merchant ID ~p", [MerchandID]),
-            {ok, logic_error(invalidRequest, <<"Invalid merchant ID">>)};
+        throw:{handler_respond, HandlerResponse} ->
+            {ok, HandlerResponse};
         error:{woody_error, {Source, Class, Details}} ->
             process_woody_error(Source, Class, Details);
         Class:Reason:Stacktrace ->
@@ -157,6 +157,10 @@ prepare(OperationID, Req, Context, [Handler | Rest]) ->
         {ok, State} ->
             {ok, State}
     end.
+
+-spec respond(response()) -> throw(response()).
+respond(Response) ->
+    erlang:throw({handler_respond, Response}).
 
 get_auth_context(#{auth_context := AuthContext}) ->
     AuthContext.

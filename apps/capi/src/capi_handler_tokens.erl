@@ -45,7 +45,9 @@ prepare_payment_tool_prototype(#{<<"paymentTool">> := Data}) ->
     prepare_provider_scope(Data).
 
 prepare_provider_scope(#{<<"paymentToolType">> := <<"TokenizedCardData">>} = Data) ->
-    MerchantID = decode_merchant_id(get_token_provider(Data), get_token_provider_merchant_id(Data)),
+    Provider = get_token_provider(Data),
+    EncodedID = get_token_provider_merchant_id(Data),
+    MerchantID = unwrap_merchant_id(Provider, EncodedID),
     #{
         party => maps:get(party, MerchantID, undefined),
         shop => maps:get(shop, MerchantID, undefined),
@@ -328,28 +330,28 @@ put_session_to_cds(SessionID, SessionData, Context) ->
     {ok, ok} = capi_handler_utils:service_call(Call, Context),
     ok.
 
--spec decode_merchant_id(atom(), binary()) -> map().
-decode_merchant_id(TokenProvider, Encoded) ->
-    case decode_merchant_id_fallback(Encoded) of
+-spec unwrap_merchant_id(atom(), binary()) -> map().
+unwrap_merchant_id(Provider, EncodedID) ->
+    case unwrap_merchant_id_fallback(Provider, EncodedID) of
         #{} = Map ->
             Map;
         _ ->
-            case binary:split(Encoded, <<$:>>, [global]) of
+            case binary:split(EncodedID, <<$:>>, [global]) of
                 [RealmMode, PartyID, ShopID] ->
                     #{
                         realm => RealmMode, party => PartyID, shop => ShopID
                     };
                 _ ->
-                    _ = logger:warning("invalid merchant id: ~p ~p", [TokenProvider, Encoded]),
+                    _ = logger:warning("invalid merchant id: ~p ~p", [Provider, EncodedID]),
                     % TODO  ED-124 после отладки подсистемы переключить на исключение
-                    % erlang:throw({invalid_merchant_id, Encoded})
+                    % capi_handler:respond(logic_error(invalidRequest, <<"Invalid merchant ID">>))
                     #{}
             end
     end.
 
-decode_merchant_id_fallback(String) ->
+unwrap_merchant_id_fallback(Provider, EncodedID) ->
     FallbackMap = genlib_app:env(capi_pcidss, fallback_merchant_map, #{}),
-    case maps:get(String, FallbackMap, undefined) of
+    case maps:get({Provider, EncodedID}, FallbackMap, undefined) of
         Map when is_map(Map) ->
             genlib_map:compact(
                 maps:map(
@@ -459,22 +461,21 @@ get_token_provider(#{<<"provider">> := <<"SamsungPay">>}) ->
 get_token_provider(#{<<"provider">> := <<"YandexPay">>}) ->
     yandexpay.
 
-get_token_provider_merchant_id(Data) ->
-    case Data of
-        #{<<"provider">> := <<"ApplePay">>} ->
-            maps:get(<<"merchantID">>, Data);
-        #{<<"provider">> := <<"GooglePay">>} ->
-            maps:get(<<"gatewayMerchantID">>, Data);
-        #{<<"provider">> := <<"SamsungPay">>} ->
-            % TODO #123 возможно тут потребуется дополнительная обработка
-            % https://pay.samsung.com/developers/resource/guide
-            maps:get(<<"referenceID">>, Data);
-        #{<<"provider">> := <<"YandexPay">>} ->
-            maps:get(<<"gatewayMerchantID">>, Data)
-    end.
+get_token_provider_merchant_id(#{<<"provider">> := <<"ApplePay">>} = Data) ->
+    maps:get(<<"merchantID">>, Data);
+get_token_provider_merchant_id(#{<<"provider">> := <<"GooglePay">>} = Data) ->
+    maps:get(<<"gatewayMerchantID">>, Data);
+get_token_provider_merchant_id(#{<<"provider">> := <<"SamsungPay">>} = Data) ->
+    % TODO #123 пока serviceID поскольку merchant.reference отсутствует
+    % https://pay.samsung.com/developers/resource/guide
+    maps:get(<<"serviceID">>, Data);
+get_token_provider_merchant_id(#{<<"provider">> := <<"YandexPay">>} = Data) ->
+    maps:get(<<"gatewayMerchantID">>, Data).
 
 encode_wrapped_payment_tool(Data) ->
-    MerchantID = decode_merchant_id(get_token_provider(Data), get_token_provider_merchant_id(Data)),
+    Provider = get_token_provider(Data),
+    EncodedID = get_token_provider_merchant_id(Data),
+    MerchantID = unwrap_merchant_id(Provider, EncodedID),
     RealmMode = maps:get(realm, MerchantID, undefined),
     #paytoolprv_WrappedPaymentTool{
         request = encode_payment_request(Data),
