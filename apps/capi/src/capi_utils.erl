@@ -11,7 +11,7 @@
 
 -export([base64url_to_map/1]).
 -export([map_to_base64url/1]).
--export([validate_url/1]).
+-export([delete_url_query_params/1]).
 
 -export([parse_deadline/1]).
 -export([parse_lifetime/1]).
@@ -52,13 +52,14 @@ base64url_to_map(Base64) when is_binary(Base64) ->
 map_to_base64url(Map) when is_map(Map) ->
     jose_base64url:encode(jsx:encode(Map)).
 
--spec validate_url(binary()) -> ok | uri_string:error().
-validate_url(Url) ->
+-spec delete_url_query_params(binary()) -> {ok, binary()} | uri_string:error().
+delete_url_query_params(Url) ->
     case uri_string:parse(Url) of
         {error, _, _} = Error ->
             Error;
-        UriMap when is_map(UriMap) ->
-            ok
+        UriMap1 when is_map(UriMap1) ->
+            UriMap2 = maps:without([query, fragment], UriMap1),
+            {ok, uri_string:recompose(UriMap2)}
     end.
 
 -spec to_universal_time(Timestamp :: binary()) -> TimestampUTC :: binary().
