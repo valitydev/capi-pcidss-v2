@@ -342,7 +342,9 @@ unwrap_merchant_id(Provider, EncodedID) ->
             case binary:split(EncodedID, <<$:>>, [global]) of
                 [RealmMode, PartyID, ShopID] ->
                     #{
-                        realm => RealmMode, party => PartyID, shop => ShopID
+                        realm => RealmMode,
+                        party => PartyID,
+                        shop => ShopID
                     };
                 _ ->
                     _ = logger:warning("invalid merchant id: ~p ~p", [Provider, EncodedID]),
@@ -529,16 +531,18 @@ process_tokenized_card_data_result(
         valid_until = ValidUntil
     }
 ) ->
-    TokenProvider = get_payment_token_provider(PaymentDetails, PaymentData),
+    TokenProvider = get_payment_token_provider(PaymentDetails),
+    TokenizationMethod = get_tokenization_method(PaymentData),
     {NS, ProviderMetadata} = extract_payment_tool_provider_metadata(PaymentDetails),
     BankCard1 = BankCard#domain_BankCard{
         bin = get_tokenized_bin(PaymentData),
         payment_system_deprecated = PaymentSystem,
         last_digits = get_tokenized_pan(Last4, PaymentData),
         token_provider_deprecated = TokenProvider,
-        is_cvv_empty = set_is_empty_cvv(TokenProvider, BankCard),
+        is_cvv_empty = set_is_empty_cvv(TokenizationMethod, BankCard),
         exp_date = encode_exp_date(genlib_map:get(exp_date, ExtraCardData)),
-        cardholder_name = genlib_map:get(cardholder, ExtraCardData)
+        cardholder_name = genlib_map:get(cardholder, ExtraCardData),
+        tokenization_method = TokenizationMethod
     },
     BankCard2 = add_metadata(NS, ProviderMetadata, BankCard1),
     Deadline = capi_utils:deadline_from_binary(ValidUntil),
@@ -556,33 +560,27 @@ get_tokenized_pan(_Last4, {card, #paytoolprv_Card{pan = PAN}}) ->
 get_tokenized_pan(Last4, _PaymentData) when Last4 =/= undefined ->
     Last4.
 
+get_tokenization_method({card, _}) ->
+    none;
+get_tokenization_method({tokenized_card, _}) ->
+    dpan.
+
 % Do not drop is_cvv_empty flag for tokenized bank cards which looks like
 % simple bank card. This prevent wrong routing decisions in hellgate
 % when cvv is empty, but is_cvv_empty = undefined, which forces routing to bypass
-% restrictions and crash adapter. This situation is
-% only applicable for GooglePay with tokenized bank card via browser.
-set_is_empty_cvv(undefined, BankCard) ->
+% restrictions and crash adapter.
+set_is_empty_cvv(none, BankCard) ->
     BankCard#domain_BankCard.is_cvv_empty;
 set_is_empty_cvv(_, _) ->
     undefined.
 
-get_payment_token_provider({yandex, _}, _) ->
-    % TODO
-    % Infamous Yandex.Pay is exempt from the following consideration, because we need that. And because
-    % dropping following reclassification is too dangerous because of domain config complexity. I really
-    % hope this hyperkludge won't live long.
+get_payment_token_provider({yandex, _}) ->
     yandexpay;
-get_payment_token_provider(_PaymentDetails, {card, _}) ->
-    % TODO
-    % We deliberately hide the fact that we've got that payment tool from the likes of Google Chrome browser
-    % in order to make our internal services think of it as if it was good ol' plain bank card. Without a
-    % CVV though. A better solution would be to distinguish between a _token provider_ and an _origin_.
-    undefined;
-get_payment_token_provider({apple, _}, _PaymentData) ->
+get_payment_token_provider({apple, _}) ->
     applepay;
-get_payment_token_provider({google, _}, _PaymentData) ->
+get_payment_token_provider({google, _}) ->
     googlepay;
-get_payment_token_provider({samsung, _}, _PaymentData) ->
+get_payment_token_provider({samsung, _}) ->
     samsungpay.
 
 %% TODO
