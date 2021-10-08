@@ -339,18 +339,16 @@ unwrap_merchant_id(Provider, EncodedID) ->
         #{} = Map ->
             Map;
         _ ->
-            case binary:split(EncodedID, <<$:>>, [global]) of
-                [RealmMode, PartyID, ShopID] ->
+            case capi_merchant_id:decode(EncodedID) of
+                Data when Data =/= undefined ->
                     #{
-                        realm => RealmMode,
-                        party => PartyID,
-                        shop => ShopID
+                        realm => capi_merchant_id:realm(Data),
+                        party => capi_merchant_id:party_id(Data),
+                        shop => capi_merchant_id:shop_id(Data)
                     };
                 _ ->
                     _ = logger:warning("invalid merchant id: ~p ~p", [Provider, EncodedID]),
-                    % TODO  ED-124 после отладки подсистемы переключить на исключение
-                    % capi_handler:respond(logic_error(invalidRequest, <<"Invalid merchant ID">>))
-                    #{}
+                    capi_handler:respond(logic_error(invalidRequest, <<"Invalid merchant ID">>))
             end
     end.
 
@@ -361,7 +359,7 @@ unwrap_merchant_id_fallback(Provider, EncodedID) ->
             genlib_map:compact(
                 maps:map(
                     fun
-                        (realm, V) -> decode_realm_mode(V);
+                        (realm, V) -> V;
                         (party, V) -> V;
                         (shop, V) -> V;
                         (expiration, {_Y, _M, _D} = V) -> capi_utils:deadline_to_binary({{V, {0, 0, 0}}, 0});
@@ -373,10 +371,6 @@ unwrap_merchant_id_fallback(Provider, EncodedID) ->
         _Other ->
             undefined
     end.
-
-decode_realm_mode(live) -> <<"live">>;
-decode_realm_mode(test) -> <<"test">>;
-decode_realm_mode(_) -> undefined.
 
 lifetime_to_deadline(Lifetime) when is_integer(Lifetime) ->
     capi_utils:deadline_from_timeout(Lifetime);
@@ -484,18 +478,8 @@ encode_wrapped_payment_tool(Data) ->
     RealmMode = maps:get(realm, MerchantID, undefined),
     #paytoolprv_WrappedPaymentTool{
         request = encode_payment_request(Data),
-        realm = encode_realm_mode(RealmMode)
+        realm = RealmMode
     }.
-
-encode_realm_mode(RealmMode) ->
-    case RealmMode of
-        <<"test">> ->
-            test;
-        <<"live">> ->
-            live;
-        _Other ->
-            undefined
-    end.
 
 encode_payment_request(#{<<"provider">> := <<"ApplePay">>} = Data) ->
     {apple, #paytoolprv_ApplePayRequest{
