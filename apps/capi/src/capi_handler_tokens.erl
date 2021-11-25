@@ -1,5 +1,7 @@
 -module(capi_handler_tokens).
 
+-type token_provider() :: yandexpay | applepay | googlepay | samsungpay.
+
 -include_lib("damsel/include/dmsl_domain_thrift.hrl").
 -include_lib("cds_proto/include/cds_proto_storage_thrift.hrl").
 -include_lib("tds_proto/include/tds_proto_storage_thrift.hrl").
@@ -11,6 +13,7 @@
 -behaviour(capi_handler).
 
 -export([prepare/3]).
+-export([get_token_providers/0]).
 
 -import(capi_handler_utils, [logic_error/2, validation_error/1]).
 
@@ -507,7 +510,6 @@ process_tokenized_card_data_result(
     ExtraCardData,
     #paytoolprv_UnwrappedPaymentTool{
         card_info = #paytoolprv_CardInfo{
-            payment_system_deprecated = PaymentSystem,
             last_4_digits = Last4
         },
         payment_data = PaymentData,
@@ -516,12 +518,13 @@ process_tokenized_card_data_result(
     }
 ) ->
     TokenProvider = get_payment_token_provider(PaymentDetails),
+    TokenServiceID = get_token_service_id(TokenProvider),
     TokenizationMethod = get_tokenization_method(PaymentData),
     {NS, ProviderMetadata} = extract_payment_tool_provider_metadata(PaymentDetails),
     BankCard1 = BankCard#domain_BankCard{
         bin = get_tokenized_bin(PaymentData),
-        payment_system_deprecated = PaymentSystem,
         last_digits = get_tokenized_pan(Last4, PaymentData),
+        payment_token = #domain_BankCardTokenServiceRef{id = TokenServiceID},
         token_provider_deprecated = TokenProvider,
         is_cvv_empty = set_is_empty_cvv(TokenizationMethod, BankCard),
         exp_date = encode_exp_date(genlib_map:get(exp_date, ExtraCardData)),
@@ -566,6 +569,14 @@ get_payment_token_provider({google, _}) ->
     googlepay;
 get_payment_token_provider({samsung, _}) ->
     samsungpay.
+
+-spec get_token_providers() -> [token_provider()].
+get_token_providers() ->
+    [yandexpay, applepay, googlepay, samsungpay].
+
+get_token_service_id(TokenProvider) ->
+    TokenServices = genlib_app:env(capi_pcidss, bank_card_token_service_mapping),
+    maps:get(TokenProvider, TokenServices).
 
 %% TODO
 %% All this stuff deserves its own module I believe. These super-long names are quite strong hints.

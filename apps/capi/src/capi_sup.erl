@@ -23,6 +23,7 @@ start_link() ->
 
 -spec init([]) -> {ok, {supervisor:sup_flags(), [supervisor:child_spec()]}}.
 init([]) ->
+    validate_token_services(),
     LechiffreOpts = genlib_app:env(capi_pcidss, lechiffre_opts),
     LechiffreSpec = lechiffre:child_spec(lechiffre, LechiffreOpts),
     {LogicHandler, LogicHandlerSpecs} = get_logic_handler_info(),
@@ -51,3 +52,17 @@ get_logic_handler_info() ->
         undefined ->
             exit(undefined_service_type)
     end.
+
+validate_token_services() ->
+    TokenServices = genlib_app:env(capi_pcidss, bank_card_token_service_mapping),
+    lists:foreach(
+        fun(TokenProvider) ->
+            case maps:find(TokenProvider, TokenServices) of
+                error ->
+                    exit({invalid, bank_card_token_service_mapping, {missed_token_provider, TokenProvider}});
+                {ok, _} ->
+                    ok
+            end
+        end,
+        capi_handler_tokens:get_token_providers()
+    ).
