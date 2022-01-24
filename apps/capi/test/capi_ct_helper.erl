@@ -105,8 +105,7 @@ start_app(AppName, Env) ->
     genlib_app:start_application_with(AppName, Env).
 
 -spec start_token_keeper(pid(), config()) -> [app_name()].
-start_token_keeper(SupPid, Config) ->
-    ok = capi_ct_helper_token_keeper:configure_uac(Config),
+start_token_keeper(SupPid, _Config) ->
     capi_ct_helper_token_keeper:mock_client(capi_ct_helper_token_keeper:user_session_handler(), SupPid).
 
 -spec start_capi(config()) -> [app_name()].
