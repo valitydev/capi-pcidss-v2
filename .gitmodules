@@ -1,3 +1,0 @@
-[submodule "schemes/swag-payments"]
-	path = schemes/swag-payments
-	url = git@github.com:valitydev/swag-payments.git

@@ -30,10 +30,9 @@ jobs:
   run:
     name: Run checks
     needs: setup
-    uses: valitydev/erlang-workflows/.github/workflows/erlang-parallel-build.yml@8f4d2fc5798ed55f73bbe0c70df354e28fb80b65
+    uses: valitydev/erlang-workflows/.github/workflows/erlang-parallel-build.yml@v1.0.0
     with:
       otp-version: ${{ needs.setup.outputs.otp-version }}
       rebar-version: ${{ needs.setup.outputs.rebar-version }}
       use-thrift: true
       thrift-version: ${{ needs.setup.outputs.thrift-version }}
-      use-swagger-codegen: true

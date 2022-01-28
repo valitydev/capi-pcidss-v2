@@ -12,8 +12,6 @@ erl_crash.dump
 /_checkouts/
 
 # generated
-apps/swag_server
-apps/swag_client
 *.beam
 
 # containerization

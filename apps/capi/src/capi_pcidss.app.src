@@ -12,7 +12,7 @@
         tds_proto,
         damsel,
         lechiffre,
-        moneypenny_proto,
+        moneypenny,
         snowflake,
         capi_woody_client,
         scoper,

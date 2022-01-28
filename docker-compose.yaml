@@ -9,8 +9,6 @@ services:
       args:
         OTP_VERSION: $OTP_VERSION
         THRIFT_VERSION: $THRIFT_VERSION
-        CODEGEN_VERSION: $CODEGEN_VERSION
-        GENERATOR_VERSION: $GENERATOR_VERSION
     volumes:
       - .:$PWD
     hostname: capi-pcidss-v2
