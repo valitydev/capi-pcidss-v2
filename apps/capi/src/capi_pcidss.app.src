@@ -25,7 +25,7 @@
         erl_health,
         cds_proto,
         prometheus,
-        prometheus_cowboy,
+        % prometheus_cowboy,
         bankcard_validator,
         bouncer_proto,
         bouncer_client,
