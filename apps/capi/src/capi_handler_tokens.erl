@@ -6,7 +6,7 @@
 -include_lib("cds_proto/include/cds_proto_storage_thrift.hrl").
 -include_lib("tds_proto/include/tds_proto_storage_thrift.hrl").
 -include_lib("damsel/include/dmsl_payment_tool_provider_thrift.hrl").
--include_lib("moneypenny_proto/include/moneypenny_mnp_thrift.hrl").
+-include_lib("moneypenny/include/moneypenny_mnp_thrift.hrl").
 
 -include_lib("bouncer_proto/include/bouncer_restriction_thrift.hrl").
 
