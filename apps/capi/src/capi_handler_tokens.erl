@@ -389,24 +389,21 @@ lifetime_to_deadline(Lifetime) ->
 
 process_payment_terminal_data(Data) ->
     PaymentTerminal = #domain_PaymentTerminal{
-        terminal_type_deprecated = binary_to_existing_atom(genlib_map:get(<<"provider">>, Data), utf8)
+        payment_service = encode_payment_service_ref(maps:get(<<"provider">>, Data))
     },
     {payment_terminal, PaymentTerminal}.
 
 process_digital_wallet_data(Data, IdempotentParams, Context) ->
-    TokenID = maybe_store_token_in_tds(Data, IdempotentParams, Context),
-    DigitalWallet =
-        case Data of
-            #{<<"digitalWalletType">> := <<"DigitalWalletQIWI">>} ->
-                #domain_DigitalWallet{
-                    provider_deprecated = qiwi,
-                    id = maps:get(<<"phoneNumber">>, Data),
-                    token = TokenID
-                }
-        end,
+    DigitalWallet = #domain_DigitalWallet{
+        id = maps:get(<<"id">>, Data),
+        payment_service = encode_payment_service_ref(maps:get(<<"provider">>, Data)),
+        token = maybe_store_token_in_tds(maps:get(<<"token">>, Data, undefined), IdempotentParams, Context)
+    },
     {digital_wallet, DigitalWallet}.
 
-maybe_store_token_in_tds(#{<<"accessToken">> := TokenContent}, IdempotentParams, Context) ->
+maybe_store_token_in_tds(TokenContent, IdempotentParams, Context)
+  when TokenContent =/= undefined
+->
     #{woody_context := WoodyCtx} = Context,
     {_ExternalID, IdempotentKey} = IdempotentParams,
     Token = #tds_Token{content = TokenContent},
@@ -747,3 +744,6 @@ add_metadata(NS, Metadata, BankCard = #domain_BankCard{metadata = Acc = #{}}) ->
     };
 add_metadata(NS, Metadata, BankCard = #domain_BankCard{metadata = undefined}) ->
     add_metadata(NS, Metadata, BankCard#domain_BankCard{metadata = #{}}).
+
+encode_payment_service_ref(Provider) ->
+    #domain_PaymentServiceRef{id = Provider}.
