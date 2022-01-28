@@ -19,5 +19,7 @@ apps/swag_client
 # containerization
 \#*
 .\#*
-Dockerfile
-docker-compose.yml
+
+# Makefile
+Makefile.env
+.image.dev

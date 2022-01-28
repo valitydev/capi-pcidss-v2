@@ -1,0 +1,31 @@
+ARG OTP_VERSION
+
+FROM docker.io/library/erlang:${OTP_VERSION}
+
+ARG THRIFT_VERSION
+ARG CODEGEN_VERSION
+ARG GENERATOR_VERSION
+ARG TARGETARCH
+
+RUN apt-get update && \
+    apt-get install -y openjdk-11-jdk ca-certificates-java && \
+    apt-get clean && \
+    update-ca-certificates -f;
+
+ENV JAVA_HOME /usr/lib/jvm/java-11-openjdk-amd64/
+RUN export JAVA_HOME
+
+RUN curl -L "https://github.com/valitydev/thrift/releases/download/${THRIFT_VERSION}/thrift-${THRIFT_VERSION}-linux-${TARGETARCH}.tar.gz" \
+    | tar -xvz -C /usr/local/bin/
+
+RUN mkdir -p /usr/local/lib/swagger-codegen && \
+    chown $(whoami) /usr/local/lib/swagger-codegen && \
+    wget "https://repo1.maven.org/maven2/io/swagger/swagger-codegen-cli/${CODEGEN_VERSION}/swagger-codegen-cli-${CODEGEN_VERSION}.jar" -O /usr/local/lib/swagger-codegen/swagger-codegen-cli.jar && \
+    wget "https://github.com/valitydev/swagger-generator-erlang/releases/download/v${GENERATOR_VERSION}/swagger-generator-erlang-v${GENERATOR_VERSION}.jar" -O /usr/local/lib/swagger-codegen/swagger-generator-erlang.jar && \
+    echo "#!/bin/sh" > /usr/local/bin/swagger-codegen && \
+    echo "java -cp /usr/local/lib/swagger-codegen/swagger-generator-erlang.jar:/usr/local/lib/swagger-codegen/swagger-codegen-cli.jar io.swagger.codegen.SwaggerCodegen \$*" >> /usr/local/bin/swagger-codegen && \
+    chmod +x /usr/local/bin/swagger-codegen
+
+ENV CHARSET=UTF-8
+ENV LANG=C.UTF-8
+CMD /bin/bash
