@@ -1,5 +1,7 @@
 -module(capi_auth).
 
+-define(APP, capi_pcidss).
+
 %% API functions
 
 -export([get_subject_id/1]).
@@ -16,7 +18,7 @@
 -type token_type() :: bearer.
 -type preauth_context() :: {unauthorized, {token_type(), token_keeper_client:token()}}.
 -type auth_context() :: {authorized, token_keeper_client:auth_data()}.
--type resolution() :: allowed | forbidden.
+-type resolution() :: bouncer_client:judgement().
 
 -export_type([preauth_context/0]).
 -export_type([auth_context/0]).
@@ -63,10 +65,25 @@ preauthorize_api_key(ApiKey) ->
             {error, Error}
     end.
 
+parse_api_key(<<"Bearer ", Token/binary>>) ->
+    {ok, {bearer, Token}};
+parse_api_key(_) ->
+    {error, unsupported_auth_scheme}.
+
 -spec authorize_api_key(preauth_context(), token_keeper_client:token_context(), woody_context:ctx()) ->
     {ok, auth_context()} | {error, _Reason}.
 authorize_api_key(?unauthorized({TokenType, Token}), TokenContext, WoodyContext) ->
     authorize_token_by_type(TokenType, Token, TokenContext, WoodyContext).
+
+authorize_token_by_type(bearer, Token, TokenContext, WoodyContext) ->
+    Authenticator = token_keeper_client:authenticator(WoodyContext),
+    case token_keeper_authenticator:authenticate(Token, TokenContext, Authenticator) of
+        {ok, AuthData} ->
+            {ok, ?authorized(AuthData)};
+        {error, TokenKeeperError} ->
+            _ = logger:warning("Token keeper authorization failed: ~p", [TokenKeeperError]),
+            {error, {auth_failed, TokenKeeperError}}
+    end.
 
 -spec authorize_operation(
     Prototypes :: capi_bouncer_context:prototypes(),
@@ -84,30 +101,15 @@ authorize_operation(Prototypes, ProcessingContext) ->
     Fragments1 = capi_bouncer_context:build(Prototypes, Fragments, WoodyContext),
     capi_bouncer:judge(Fragments1, WoodyContext).
 
+extract_auth_context(#{swagger_context := #{auth_context := AuthContext}}) ->
+    AuthContext.
+
 %%
 %% Internal functions
 %%
 
-extract_auth_context(#{swagger_context := #{auth_context := AuthContext}}) ->
-    AuthContext.
-
 get_token_keeper_fragment(?authorized(#{context := Context})) ->
     Context.
-
-authorize_token_by_type(bearer, Token, TokenContext, WoodyContext) ->
-    Authenticator = token_keeper_client:authenticator(WoodyContext),
-    case token_keeper_authenticator:authenticate(Token, TokenContext, Authenticator) of
-        {ok, AuthData} ->
-            {ok, ?authorized(AuthData)};
-        {error, TokenKeeperError} ->
-            _ = logger:warning("Token keeper authorization failed: ~p", [TokenKeeperError]),
-            {error, {auth_failed, TokenKeeperError}}
-    end.
-
-parse_api_key(<<"Bearer ", Token/binary>>) ->
-    {ok, {bearer, Token}};
-parse_api_key(_) ->
-    {error, unsupported_auth_scheme}.
 
 %%
 
@@ -118,5 +120,5 @@ get_metadata_mapped_key(Key) ->
     maps:get(Key, get_meta_mappings()).
 
 get_meta_mappings() ->
-    AuthConfig = genlib_app:env(capi, auth_config),
+    AuthConfig = genlib_app:env(?APP, auth_config),
     maps:get(metadata_mappings, AuthConfig).

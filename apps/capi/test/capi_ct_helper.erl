@@ -83,9 +83,8 @@ init_suite(Module, Config, CapiEnv) ->
             {cache_update_interval, 50000}
         ]),
     Capi = start_capi(Config, CapiEnv),
-    TokenKeeperApp = start_token_keeper(SupPid, Config),
     BouncerApp = capi_ct_helper_bouncer:mock_client(SupPid),
-    Apps = lists:reverse(Capi ++ DmtClient ++ WoodyApp ++ ScoperApp ++ BouncerApp ++ TokenKeeperApp),
+    Apps = lists:reverse(Capi ++ DmtClient ++ WoodyApp ++ ScoperApp ++ BouncerApp),
     [{apps, Apps}, {suite_test_sup, SupPid} | Config].
 
 -spec start_app(app_name()) -> [app_name()].
@@ -103,10 +102,6 @@ start_app(AppName) ->
 -spec start_app(app_name(), list()) -> [app_name()].
 start_app(AppName, Env) ->
     genlib_app:start_application_with(AppName, Env).
-
--spec start_token_keeper(pid(), config()) -> [app_name()].
-start_token_keeper(SupPid, _Config) ->
-    capi_ct_helper_token_keeper:mock_client(capi_ct_helper_token_keeper:user_session_handler(), SupPid).
 
 -spec start_capi(config()) -> [app_name()].
 start_capi(Config) ->

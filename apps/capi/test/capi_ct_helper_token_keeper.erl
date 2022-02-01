@@ -15,12 +15,8 @@
 -type token_handler() :: fun(('Authenticate' | 'Create', tuple()) -> term() | no_return()).
 
 -export([mock_token/2]).
--export([mock_not_found/1]).
+-export([mock_invalid_token/1]).
 -export([mock_user_session_token/1]).
--export([mock_api_key_token/2]).
--export([mock_invoice_access_token/3]).
--export([mock_invoice_template_access_token/3]).
--export([mock_customer_access_token/3]).
 
 -spec mock_token(token_handler(), sup_or_config()) -> list(app_name()).
 mock_token(HandlerFun, SupOrConfig) ->
@@ -52,9 +48,9 @@ start_client(ServiceURLs) ->
 
 %%
 
--spec mock_not_found(sup_or_config()) -> list(app_name()).
-mock_not_found(SupOrConfig) ->
-    mock_token(fun('Authenticate', {_, _}) -> {throwing, #token_keeper_AuthDataNotFound{}} end, SupOrConfig).
+-spec mock_invalid_token(sup_or_config()) -> list(app_name()).
+mock_invalid_token(SupOrConfig) ->
+    mock_token(fun('Authenticate', {_, _}) -> {throwing, #token_keeper_InvalidToken{}} end, SupOrConfig).
 
 -spec mock_user_session_token(sup_or_config()) -> list(app_name()).
 mock_user_session_token(SupOrConfig) ->
@@ -70,59 +66,6 @@ mock_user_session_token(SupOrConfig) ->
             token => #{id => ?STRING}
         },
         {?TK_AUTHORITY_KEYCLOAK, create_bouncer_context(AuthParams, UserParams), user_session_metadata()}
-    end),
-    mock_token(Handler, SupOrConfig).
-
--spec mock_api_key_token(binary(), sup_or_config()) -> list(app_name()).
-mock_api_key_token(PartyID, SupOrConfig) ->
-    Handler = make_authenticator_handler(fun() ->
-        AuthParams = #{
-            method => <<"ApiKeyToken">>,
-            token => #{id => ?STRING},
-            scope => [#{party => #{id => PartyID}}]
-        },
-        {?TK_AUTHORITY_APIKEYMGMT, create_bouncer_context(AuthParams), api_key_metadata()}
-    end),
-    mock_token(Handler, SupOrConfig).
-
--spec mock_invoice_access_token(binary(), binary(), sup_or_config()) -> list(app_name()).
-mock_invoice_access_token(PartyID, InvoiceID, SupOrConfig) ->
-    Handler = make_authenticator_handler(fun() ->
-        AuthParams = #{
-            method => <<"InvoiceAccessToken">>,
-            expiration => posix_to_rfc3339(lifetime_to_expiration(?TOKEN_LIFETIME)),
-            token => #{id => ?STRING},
-            scope => [#{party => #{id => PartyID}, invoice => #{id => InvoiceID}}]
-        },
-        {<<"com.rbkmoney.capi">>, create_bouncer_context(AuthParams), [
-            api_key_metadata(), consumer_metadata(<<"client">>)
-        ]}
-    end),
-    mock_token(Handler, SupOrConfig).
-
--spec mock_invoice_template_access_token(binary(), binary(), sup_or_config()) -> list(app_name()).
-mock_invoice_template_access_token(PartyID, InvoiceTemplateID, SupOrConfig) ->
-    Handler = make_authenticator_handler(fun() ->
-        AuthParams = #{
-            method => <<"InvoiceAccessToken">>,
-            expiration => posix_to_rfc3339(unlimited),
-            token => #{id => ?STRING},
-            scope => [#{party => #{id => PartyID}, invoice_template => #{id => InvoiceTemplateID}}]
-        },
-        {<<"com.rbkmoney.capi">>, create_bouncer_context(AuthParams), api_key_metadata()}
-    end),
-    mock_token(Handler, SupOrConfig).
-
--spec mock_customer_access_token(binary(), binary(), sup_or_config()) -> list(app_name()).
-mock_customer_access_token(PartyID, CustomerID, SupOrConfig) ->
-    Handler = make_authenticator_handler(fun() ->
-        AuthParams = #{
-            method => <<"CustomerAccessToken">>,
-            expiration => posix_to_rfc3339(lifetime_to_expiration(?TOKEN_LIFETIME)),
-            token => #{id => ?STRING},
-            scope => [#{party => #{id => PartyID}, customer => #{id => CustomerID}}]
-        },
-        {<<"com.rbkmoney.capi">>, create_bouncer_context(AuthParams), api_key_metadata()}
     end),
     mock_token(Handler, SupOrConfig).
 
@@ -155,21 +98,7 @@ user_session_metadata() ->
         ?TK_META_USER_EMAIL => ?USER_EMAIL
     }).
 
-api_key_metadata() ->
-    genlib_map:compact(#{
-        ?TK_META_PARTY_ID => ?PARTY_ID
-    }).
-
-consumer_metadata(Consumer) ->
-    genlib_map:compact(#{
-        ?TK_META_TOKEN_CONSUMER => Consumer
-    }).
-
 %%
-
-create_bouncer_context(AuthParams) ->
-    Fragment0 = bouncer_context_helpers:make_auth_fragment(AuthParams),
-    encode_context(Fragment0).
 
 create_bouncer_context(AuthParams, UserParams) ->
     Fragment0 = bouncer_context_helpers:make_auth_fragment(AuthParams),
