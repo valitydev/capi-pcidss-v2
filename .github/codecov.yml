@@ -1,12 +1,10 @@
 coverage:
-  precision: 0
-  round: down
   status:
     project:
       default:
         # Don't allow total coverage to drop
         target: auto
-        threshold: 0%
+        threshold: 1%
     patch:
       default:
         # Force new code to be at least 80% covered
