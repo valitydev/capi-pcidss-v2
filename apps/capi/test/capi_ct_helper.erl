@@ -38,8 +38,14 @@
 ).
 
 %%
+
 -type config() :: [{atom(), any()}].
 -type app_name() :: atom().
+-type sup_or_config() :: config() | pid().
+
+-export_type([config/0]).
+-export_type([app_name/0]).
+-export_type([sup_or_config/0]).
 
 -spec init_suite(module(), config()) -> config().
 init_suite(Module, Config) ->

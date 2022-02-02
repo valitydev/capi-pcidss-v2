@@ -80,17 +80,12 @@ make_authenticator_handler(Handler) ->
             status = active,
             context = ContextFragment,
             authority = Authority,
-            metadata = combine_metadata(Metadata)
+            metadata = Metadata
         },
         {ok, AuthData}
     end.
 
 %%
-
-combine_metadata(MetadataParts) when is_list(MetadataParts) ->
-    lists:foldl(fun(Part, Acc) -> maps:merge(Acc, Part) end, #{}, MetadataParts);
-combine_metadata(#{} = FullMetadata) ->
-    FullMetadata.
 
 user_session_metadata() ->
     genlib_map:compact(#{
@@ -126,6 +121,4 @@ lifetime_to_expiration(Lt) when is_integer(Lt) ->
     genlib_time:unow() + Lt.
 
 posix_to_rfc3339(Timestamp) when is_integer(Timestamp) ->
-    genlib_rfc3339:format(Timestamp, second);
-posix_to_rfc3339(unlimited) ->
-    undefined.
+    genlib_rfc3339:format(Timestamp, second).
