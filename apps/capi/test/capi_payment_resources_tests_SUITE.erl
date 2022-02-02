@@ -25,7 +25,8 @@
 -export([
     expiration_date_fail_test/1,
     create_visa_payment_resource_ok_test/1,
-    create_payment_resource_with_client_url_fail_test/1,
+    % FIXME Made obsolete by client validation
+    % create_payment_resource_with_client_url_fail_test/1,
     create_payment_resource_invalid_cardholder_test/1,
     create_visa_with_empty_cvc_ok_test/1,
     create_visa_with_wrong_cvc_test/1,
@@ -97,7 +98,8 @@ groups() ->
         {payment_resources, [], [
             expiration_date_fail_test,
             create_visa_payment_resource_ok_test,
-            create_payment_resource_with_client_url_fail_test,
+            % FIXME Made obsolete by client validation
+            %create_payment_resource_with_client_url_fail_test,
             create_payment_resource_invalid_cardholder_test,
             create_visa_with_empty_cvc_ok_test,
             create_visa_with_wrong_cvc_test,
@@ -229,26 +231,27 @@ create_visa_payment_resource_ok_test(Config) ->
         <<"clientInfo">> => ClientInfo
     }).
 
--spec create_payment_resource_with_client_url_fail_test(_) -> _.
-create_payment_resource_with_client_url_fail_test(Config) ->
-    ClientInfo = #{
-        <<"fingerprint">> => <<"test fingerprint">>,
-        <<"url">> => <<"123://www.shop.com">>
-    },
-    {error,
-        {400, #{
-            <<"code">> := <<"invalidRequest">>,
-            <<"message">> := <<"Client info url is invalid">>
-        }}} = capi_client_tokens:create_payment_resource(?config(context, Config), #{
-        <<"paymentTool">> => #{
-            <<"paymentToolType">> => <<"CardData">>,
-            <<"cardNumber">> => <<"4111111111111111">>,
-            <<"cardHolder">> => <<"Alexander Weinerschnitzel">>,
-            <<"expDate">> => <<"03/20">>,
-            <<"cvv">> => <<"232">>
-        },
-        <<"clientInfo">> => ClientInfo
-    }).
+% FIXME Made obsolete by client validation
+% -spec create_payment_resource_with_client_url_fail_test(_) -> _.
+% create_payment_resource_with_client_url_fail_test(Config) ->
+%     ClientInfo = #{
+%         <<"fingerprint">> => <<"test fingerprint">>,
+%         <<"url">> => <<"123://www.shop.com">>
+%     },
+%     {error,
+%         {400, #{
+%             <<"code">> := <<"invalidRequest">>,
+%             <<"message">> := <<"Client info url is invalid">>
+%         }}} = capi_client_tokens:create_payment_resource(?config(context, Config), #{
+%         <<"paymentTool">> => #{
+%             <<"paymentToolType">> => <<"CardData">>,
+%             <<"cardNumber">> => <<"4111111111111111">>,
+%             <<"cardHolder">> => <<"Alexander Weinerschnitzel">>,
+%             <<"expDate">> => <<"03/20">>,
+%             <<"cvv">> => <<"232">>
+%         },
+%         <<"clientInfo">> => ClientInfo
+%     }).
 
 -spec expiration_date_fail_test(_) -> _.
 expiration_date_fail_test(Config) ->
