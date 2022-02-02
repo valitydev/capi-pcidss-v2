@@ -1,0 +1,18 @@
+ARG OTP_VERSION
+
+FROM docker.io/library/erlang:${OTP_VERSION}
+
+ARG BUILDARCH
+
+# Install thrift compiler
+ARG THRIFT_VERSION
+
+RUN wget -q -O- "https://github.com/valitydev/thrift/releases/download/${THRIFT_VERSION}/thrift-${THRIFT_VERSION}-linux-${BUILDARCH}.tar.gz" \
+    | tar -xvz -C /usr/local/bin/
+
+# Set env
+ENV CHARSET=UTF-8
+ENV LANG=C.UTF-8
+
+# Set runtime
+CMD /bin/bash

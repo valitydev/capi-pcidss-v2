@@ -80,15 +80,18 @@ mk_operation_id_getter(#{env := Env}) ->
         (Req = #{host := _Host, path := _Path}) ->
             case cowboy_router:execute(Req, Env) of
                 {ok, _, #{handler_opts := {_Operations, _LogicHandler, _SwaggerHandlerOpts} = HandlerOpts}} ->
-                    case swag_server_utils:get_operation_id(Req, HandlerOpts) of
-                        undefined ->
-                            #{};
-                        OperationID ->
-                            #{operation_id => OperationID}
-                    end;
+                    get_operation_id_meta(Req, HandlerOpts);
                 _ ->
                     #{}
             end;
         (_Req) ->
             #{}
+    end.
+
+get_operation_id_meta(Req, HandlerOpts) ->
+    case swag_server_utils:get_operation_id(Req, HandlerOpts) of
+        undefined ->
+            #{};
+        OperationID ->
+            #{operation_id => OperationID}
     end.
