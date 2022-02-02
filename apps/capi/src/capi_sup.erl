@@ -29,7 +29,7 @@ init([]) ->
     {LogicHandler, LogicHandlerSpecs} = get_logic_handler_info(),
     AdditionalRoutes = [
         {'_', [
-            % get_prometheus_route(),
+            get_prometheus_route(),
             erl_health_handle:get_route(genlib_app:env(capi_pcidss, health_check, #{}))
         ]}
     ],
@@ -40,9 +40,9 @@ init([]) ->
         [LechiffreSpec] ++ LogicHandlerSpecs ++ [SwaggerSpec]
     }}.
 
-% -spec get_prometheus_route() -> {iodata(), module(), _Opts :: any()}.
-% get_prometheus_route() ->
-%     {"/metrics/[:registry]", prometheus_cowboy2_handler, []}.
+-spec get_prometheus_route() -> {iodata(), module(), _Opts :: any()}.
+get_prometheus_route() ->
+    {"/metrics/[:registry]", prometheus_cowboy2_handler, []}.
 
 -spec get_logic_handler_info() -> {Handler :: atom(), [Spec :: supervisor:child_spec()] | []}.
 get_logic_handler_info() ->
