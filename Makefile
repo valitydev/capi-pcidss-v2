@@ -25,7 +25,7 @@ DEV_IMAGE_ID = $(file < .image.dev)
 
 dev-image: .image.dev
 
-DOCKER_BUILD_ARGS = --build-arg $(shell echo $(DOTENV) | sed 's@ @ --build-arg @g')
+DOCKER_BUILD_ARGS = $(DOTENV:%=--build-arg %)
 
 .image.dev: Dockerfile.dev .env
 	$(DOCKER) build . -f Dockerfile.dev --tag $(DEV_IMAGE_TAG) $(DOCKER_BUILD_ARGS)
