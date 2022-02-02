@@ -4,7 +4,7 @@ coverage:
       default:
         # Don't allow total coverage to drop
         target: auto
-        threshold: 1%
+        threshold: 0%
     patch:
       default:
         # Force new code to be at least 80% covered
