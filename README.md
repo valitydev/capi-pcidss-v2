@@ -1,7 +1,6 @@
 # capi-pcidss
 
-PCIDSS part of CommonAPI written in Erlang
-
+PCI DSS part of Common API written in Erlang
 ## Building
 
 To build the project, run the following command:
@@ -29,17 +28,6 @@ You can run any of the tasks defined in the Makefile from inside of a docker con
 * This command will run the `compile` task in a docker container:
 ```bash
 $ make wc-compile
-```
-
-### Run in a docker-compose environment
-
-Similarly, you can run any of the tasks defined in the Makefile from inside of a docker-compose environment (defined in `docker-compose.yaml`) by prefixing the task name with `wdeps-`. To successfully build the dev container you need `Docker BuildKit` enabled (see `Run in a docker container` section). It *may* also be necessary to export a `COMPOSE_DOCKER_CLI_BUILD=1` environment variable for `docker-compose` container builds to work properly.
-
-#### Example
-
-* This command will run the `test` task in a docker-compose environment:
-```bash
-$ make wdeps-test
 ```
 
 ## Documentation
