@@ -683,14 +683,13 @@ create_qw_payment_resource_ok_test(Config) ->
     {ok, #{
         <<"paymentToolDetails">> := #{
             <<"detailsType">> := <<"PaymentToolDetailsDigitalWallet">>,
-            <<"digitalWalletDetailsType">> := <<"DigitalWalletDetailsQIWI">>,
-            <<"phoneNumberMask">> := <<"+7******3210">>
+            <<"provider">> := <<"qiwi">>
         }
     }} = capi_client_tokens:create_payment_resource(?config(context, Config), #{
         <<"paymentTool">> => #{
             <<"paymentToolType">> => <<"DigitalWalletData">>,
-            <<"digitalWalletType">> => <<"DigitalWalletQIWI">>,
-            <<"phoneNumber">> => <<"+79876543210">>
+            <<"id">> => <<"+79876543210">>,
+            <<"provider">> => <<"qiwi">>
         },
         <<"clientInfo">> => ClientInfo
     }).
@@ -709,17 +708,17 @@ create_qw_payment_resource_with_access_token_generates_different_payment_token(C
     PaymentParams0 = #{
         <<"paymentTool">> => #{
             <<"paymentToolType">> => <<"DigitalWalletData">>,
-            <<"digitalWalletType">> => <<"DigitalWalletQIWI">>,
-            <<"phoneNumber">> => <<"+79876543210">>
+            <<"id">> => <<"+79876543210">>,
+            <<"provider">> => <<"qiwi">>
         },
         <<"clientInfo">> => ClientInfo
     },
     PaymentParams1 = #{
         <<"paymentTool">> => #{
             <<"paymentToolType">> => <<"DigitalWalletData">>,
-            <<"digitalWalletType">> => <<"DigitalWalletQIWI">>,
-            <<"phoneNumber">> => <<"+79876543210">>,
-            <<"accessToken">> => <<"some_token">>
+            <<"id">> => <<"+79876543210">>,
+            <<"provider">> => <<"qiwi">>,
+            <<"token">> => <<"some_token">>
         },
         <<"clientInfo">> => ClientInfo
     },
@@ -747,9 +746,9 @@ create_qw_payment_resource_with_access_token_depends_on_external_id(Config) ->
     PaymentParamsNoExtId = #{
         <<"paymentTool">> => #{
             <<"paymentToolType">> => <<"DigitalWalletData">>,
-            <<"digitalWalletType">> => <<"DigitalWalletQIWI">>,
-            <<"phoneNumber">> => <<"+79876543210">>,
-            <<"accessToken">> => <<"some_token">>
+            <<"id">> => <<"+79876543210">>,
+            <<"provider">> => <<"qiwi">>,
+            <<"token">> => <<"some_token">>
         },
         <<"clientInfo">> => ClientInfo
     },
@@ -988,8 +987,8 @@ ip_replacement_allowed_test(Config) ->
     {ok, Res} = capi_client_tokens:create_payment_resource(?config(context, Config), #{
         <<"paymentTool">> => #{
             <<"paymentToolType">> => <<"DigitalWalletData">>,
-            <<"digitalWalletType">> => <<"DigitalWalletQIWI">>,
-            <<"phoneNumber">> => <<"+79876543210">>
+            <<"id">> => <<"+79876543210">>,
+            <<"provider">> => <<"qiwi">>
         },
         <<"clientInfo">> => ClientInfo
     }),
@@ -1002,8 +1001,8 @@ ip_replacement_restricted_test(Config) ->
     {ok, Res} = capi_client_tokens:create_payment_resource(?config(context, Config), #{
         <<"paymentTool">> => #{
             <<"paymentToolType">> => <<"DigitalWalletData">>,
-            <<"digitalWalletType">> => <<"DigitalWalletQIWI">>,
-            <<"phoneNumber">> => <<"+79876543210">>
+            <<"id">> => <<"+79876543210">>,
+            <<"provider">> => <<"qiwi">>
         },
         <<"clientInfo">> => ClientInfo
     }),
