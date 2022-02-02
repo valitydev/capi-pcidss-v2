@@ -10,24 +10,25 @@
 # (like `wc-dialyze`) are reproducible between local machine and CI runners.
 DOTENV := $(shell grep -v '^\#' .env)
 
-# Development images
-DEV_IMAGE_TAG = $(TEST_CONTAINER_NAME)-dev
-DEV_IMAGE_ID = $(file < .image.dev)
-
 DOCKER ?= docker
-DOCKERCOMPOSE ?= docker-compose
-DOCKERCOMPOSE_W_ENV = DEV_IMAGE_TAG=$(DEV_IMAGE_TAG) $(DOCKERCOMPOSE)
 REBAR ?= rebar3
 TEST_CONTAINER_NAME ?= testrunner
 
 all: compile
 
+# Development images
+
+DEV_IMAGE_TAG = $(TEST_CONTAINER_NAME)-dev
+DEV_IMAGE_ID = $(file < .image.dev)
+
 .PHONY: dev-image clean-dev-image wc-shell test
 
 dev-image: .image.dev
 
+DOCKER_BUILD_ARGS = --build-arg $(shell echo $(DOTENV) | sed 's@ @ --build-arg @g')
+
 .image.dev: Dockerfile.dev .env
-	env $(DOTENV) $(DOCKERCOMPOSE_W_ENV) build $(TEST_CONTAINER_NAME)
+	$(DOCKER) build . -f Dockerfile.dev --tag $(DEV_IMAGE_TAG) $(DOCKER_BUILD_ARGS)
 	$(DOCKER) image ls -q -f "reference=$(DEV_IMAGE_ID)" | head -n1 > $@
 
 clean-dev-image:
@@ -40,8 +41,6 @@ DOCKER_WC_OPTIONS := -v $(PWD):$(PWD) --workdir $(PWD)
 DOCKER_WC_EXTRA_OPTIONS ?= --rm
 DOCKER_RUN = $(DOCKER) run -t $(DOCKER_WC_OPTIONS) $(DOCKER_WC_EXTRA_OPTIONS)
 
-DOCKERCOMPOSE_RUN = $(DOCKERCOMPOSE_W_ENV) run --rm $(DOCKER_WC_OPTIONS)
-
 # Utility tasks
 
 wc-shell: dev-image
@@ -49,16 +48,6 @@ wc-shell: dev-image
 
 wc-%: dev-image
 	$(DOCKER_RUN) $(DEV_IMAGE_TAG) make $*
-
-wdeps-shell: dev-image
-	$(DOCKERCOMPOSE_RUN) $(TEST_CONTAINER_NAME) su; \
-	$(DOCKERCOMPOSE_W_ENV) down
-
-wdeps-%: dev-image
-	$(DOCKERCOMPOSE_RUN) -T $(TEST_CONTAINER_NAME) make $*; \
-	res=$$?; \
-	$(DOCKERCOMPOSE_W_ENV) down; \
-	exit $$res
 
 # Rebar tasks
 
