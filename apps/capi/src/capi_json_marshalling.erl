@@ -94,7 +94,7 @@ thrift_serialize_test_() ->
 
 serialize_thrift(Term) ->
     C1 = thrift_strict_binary_codec:new(),
-    C2 = thrift_strict_binary_codec:write(C1, {struct, union, {dmsl_json_thrift, 'Value'}}, Term),
+    {ok, C2} = thrift_strict_binary_codec:write(C1, {struct, union, {dmsl_json_thrift, 'Value'}}, Term),
     thrift_strict_binary_codec:close(C2).
 
 -endif.
