@@ -408,19 +408,18 @@ process_digital_wallet_data(Data, IdempotentParams, Context) ->
     Ref = encode_payment_service_ref(maps:get(<<"provider">>, Data)),
     case validate_payment_service_ref(Ref) of
         {ok, _} ->
+            Token = maps:get(<<"token">>, Data, undefined),
             DigitalWallet = #domain_DigitalWallet{
                 id = maps:get(<<"id">>, Data),
                 payment_service = encode_payment_service_ref(maps:get(<<"provider">>, Data)),
-                token = maybe_store_token_in_tds(maps:get(<<"token">>, Data, undefined), IdempotentParams, Context)
+                token = capi_utils:maybe(Token, fun(T) -> store_token_in_tds(T, IdempotentParams, Context) end)
             },
             {digital_wallet, DigitalWallet};
         {error, object_not_found} ->
             throw({ok, logic_error(invalidRequest, <<"Digital wallet provider is invalid">>)})
     end.
 
-maybe_store_token_in_tds(TokenContent, IdempotentParams, Context) when
-    TokenContent =/= undefined
-->
+store_token_in_tds(TokenContent, IdempotentParams, Context) ->
     #{woody_context := WoodyCtx} = Context,
     {_ExternalID, IdempotentKey} = IdempotentParams,
     Token = #tds_Token{content = TokenContent},
@@ -429,9 +428,7 @@ maybe_store_token_in_tds(TokenContent, IdempotentParams, Context) when
     {ok, TokenID} = capi_bender:gen_by_constant(IdempotentKey, RandomID, Hash, WoodyCtx),
     Call = {tds_storage, 'PutToken', {TokenID, Token}},
     {ok, ok} = capi_handler_utils:service_call(Call, Context),
-    TokenID;
-maybe_store_token_in_tds(_, _IdempotentParams, _Context) ->
-    undefined.
+    TokenID.
 
 process_tokenized_card_data(Data, IdempotentParams, #{woody_context := WoodyCtx} = Context) ->
     Call = {get_token_provider_service_name(Data), 'Unwrap', {encode_wrapped_payment_tool(Data)}},
