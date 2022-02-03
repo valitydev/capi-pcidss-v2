@@ -39,7 +39,7 @@
 
 -define(PAYMENT_SERVICE_REF(ID), {payment_service, #domain_PaymentServiceRef{id = ID}}).
 -define(PAYMENT_SERVICE_OBJ(ID),
-    {payment_system, #domain_PaymentServiceObject{
+    {payment_service, #domain_PaymentServiceObject{
         ref = #domain_PaymentServiceRef{id = ID},
         data = #domain_PaymentService{
             name = ID

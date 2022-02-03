@@ -758,5 +758,5 @@ add_metadata(NS, Metadata, BankCard = #domain_BankCard{metadata = undefined}) ->
 encode_payment_service_ref(Provider) ->
     #domain_PaymentServiceRef{id = Provider}.
 
-validate_payment_service_ref(Ref = #domain_PaymentServiceRef{})->
+validate_payment_service_ref(Ref = #domain_PaymentServiceRef{}) ->
     dmt_client:try_checkout_data({payment_service, Ref}).
