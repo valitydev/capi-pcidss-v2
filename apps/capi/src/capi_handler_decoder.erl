@@ -57,16 +57,18 @@ decode_token_provider(Provider) when Provider /= undefined ->
 decode_token_provider(undefined) ->
     undefined.
 
-decode_payment_terminal_details(#domain_PaymentTerminal{terminal_type_deprecated = Type}, V) ->
+decode_payment_terminal_details(#domain_PaymentTerminal{payment_service = PaymentService}, V) ->
     V#{
-        <<"provider">> => genlib:to_binary(Type)
+        <<"provider">> => decode_payment_service_ref(PaymentService)
     }.
 
-decode_digital_wallet_details(#domain_DigitalWallet{provider_deprecated = qiwi, id = ID}, V) ->
+decode_digital_wallet_details(#domain_DigitalWallet{payment_service = PaymentService}, V) ->
     V#{
-        <<"digitalWalletDetailsType">> => <<"DigitalWalletDetailsQIWI">>,
-        <<"phoneNumberMask">> => mask_phone_number(ID)
+        <<"provider">> => decode_payment_service_ref(PaymentService)
     }.
+
+decode_payment_service_ref(#domain_PaymentServiceRef{id = Provider}) ->
+    Provider.
 
 mask_phone_number(PhoneNumber) ->
     genlib_string:redact(PhoneNumber, <<"^\\+\\d(\\d{1,10}?)\\d{2,4}$">>).
