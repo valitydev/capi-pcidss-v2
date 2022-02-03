@@ -401,8 +401,8 @@ process_digital_wallet_data(Data, IdempotentParams, Context) ->
     },
     {digital_wallet, DigitalWallet}.
 
-maybe_store_token_in_tds(TokenContent, IdempotentParams, Context)
-  when TokenContent =/= undefined
+maybe_store_token_in_tds(TokenContent, IdempotentParams, Context) when
+    TokenContent =/= undefined
 ->
     #{woody_context := WoodyCtx} = Context,
     {_ExternalID, IdempotentKey} = IdempotentParams,
