@@ -24,6 +24,7 @@
         cowboy_access_log,
         erl_health,
         cds_proto,
+        dmt_client,
         bankcard_validator,
         bouncer_proto,
         bouncer_client,

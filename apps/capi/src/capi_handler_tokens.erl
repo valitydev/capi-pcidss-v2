@@ -388,18 +388,28 @@ lifetime_to_deadline(Lifetime) ->
 %%
 
 process_payment_terminal_data(Data) ->
-    PaymentTerminal = #domain_PaymentTerminal{
-        payment_service = encode_payment_service_ref(maps:get(<<"provider">>, Data))
-    },
-    {payment_terminal, PaymentTerminal}.
+    Ref = encode_payment_service_ref(maps:get(<<"provider">>, Data)),
+    case validate_payment_service_ref(Ref) of
+        {ok, _} ->
+            PaymentTerminal = #domain_PaymentTerminal{payment_service = Ref},
+            {payment_terminal, PaymentTerminal};
+        {error, object_not_found} ->
+            throw({ok, logic_error(invalidRequest, <<"Terminal provider is invalid">>)})
+    end.
 
 process_digital_wallet_data(Data, IdempotentParams, Context) ->
-    DigitalWallet = #domain_DigitalWallet{
-        id = maps:get(<<"id">>, Data),
-        payment_service = encode_payment_service_ref(maps:get(<<"provider">>, Data)),
-        token = maybe_store_token_in_tds(maps:get(<<"token">>, Data, undefined), IdempotentParams, Context)
-    },
-    {digital_wallet, DigitalWallet}.
+    Ref = encode_payment_service_ref(maps:get(<<"provider">>, Data)),
+    case validate_payment_service_ref(Ref) of
+        {ok, _} ->
+            DigitalWallet = #domain_DigitalWallet{
+                id = maps:get(<<"id">>, Data),
+                payment_service = encode_payment_service_ref(maps:get(<<"provider">>, Data)),
+                token = maybe_store_token_in_tds(maps:get(<<"token">>, Data, undefined), IdempotentParams, Context)
+            },
+            {digital_wallet, DigitalWallet};
+        {error, object_not_found} ->
+            throw({ok, logic_error(invalidRequest, <<"Digital wallet provider is invalid">>)})
+    end.
 
 maybe_store_token_in_tds(TokenContent, IdempotentParams, Context) when
     TokenContent =/= undefined
@@ -747,3 +757,6 @@ add_metadata(NS, Metadata, BankCard = #domain_BankCard{metadata = undefined}) ->
 
 encode_payment_service_ref(Provider) ->
     #domain_PaymentServiceRef{id = Provider}.
+
+validate_payment_service_ref(Ref = #domain_PaymentServiceRef{})->
+    dmt_client:try_checkout_data({payment_service, Ref}).
