@@ -17,7 +17,10 @@
 
 -import(capi_handler_utils, [logic_error/2, validation_error/1]).
 
+-define(APP, capi_pcidss).
+
 -define(DEFAULT_PAYMENT_TOOL_TOKEN_LIFETIME, <<"64m">>).
+-define(DEFAULT_RESOURCE_METADATA_NAMESPACE, <<"dev.vality.paymentResource">>).
 
 -spec prepare(
     OperationID :: capi_handler:operation_id(),
@@ -173,7 +176,7 @@ delete_query_params(Url) ->
 
 -spec payment_token_deadline() -> capi_utils:deadline().
 payment_token_deadline() ->
-    Lifetime = genlib_app:env(capi_pcidss, payment_tool_token_lifetime, ?DEFAULT_PAYMENT_TOOL_TOKEN_LIFETIME),
+    Lifetime = genlib_app:env(?APP, payment_tool_token_lifetime, ?DEFAULT_PAYMENT_TOOL_TOKEN_LIFETIME),
     lifetime_to_deadline(Lifetime).
 
 % Ограничиваем время жизни платежного токена временем жизни платежного инструмента.
@@ -356,7 +359,7 @@ unwrap_merchant_id(Provider, EncodedID) ->
     end.
 
 unwrap_merchant_id_fallback(Provider, EncodedID) ->
-    FallbackMap = genlib_app:env(capi_pcidss, fallback_merchant_map, #{}),
+    FallbackMap = genlib_app:env(?APP, fallback_merchant_map, #{}),
     case maps:get({Provider, EncodedID}, FallbackMap, undefined) of
         Map when is_map(Map) ->
             genlib_map:compact(
@@ -391,7 +394,11 @@ process_payment_terminal_data(Data) ->
     Ref = encode_payment_service_ref(maps:get(<<"provider">>, Data)),
     case validate_payment_service_ref(Ref) of
         {ok, _} ->
-            PaymentTerminal = #domain_PaymentTerminal{payment_service = Ref},
+            Metadata = maps:get(<<"metadata">>, Data),
+            PaymentTerminal = #domain_PaymentTerminal{
+                payment_service = Ref,
+                metadata = capi_utils:maybe(Metadata, fun encode_resource_metadata/1)
+            },
             {payment_terminal, PaymentTerminal};
         {error, object_not_found} ->
             throw({ok, logic_error(invalidRequest, <<"Terminal provider is invalid">>)})
@@ -401,19 +408,18 @@ process_digital_wallet_data(Data, IdempotentParams, Context) ->
     Ref = encode_payment_service_ref(maps:get(<<"provider">>, Data)),
     case validate_payment_service_ref(Ref) of
         {ok, _} ->
+            Token = maps:get(<<"token">>, Data, undefined),
             DigitalWallet = #domain_DigitalWallet{
                 id = maps:get(<<"id">>, Data),
                 payment_service = encode_payment_service_ref(maps:get(<<"provider">>, Data)),
-                token = maybe_store_token_in_tds(maps:get(<<"token">>, Data, undefined), IdempotentParams, Context)
+                token = capi_utils:maybe(Token, fun(T) -> store_token_in_tds(T, IdempotentParams, Context) end)
             },
             {digital_wallet, DigitalWallet};
         {error, object_not_found} ->
             throw({ok, logic_error(invalidRequest, <<"Digital wallet provider is invalid">>)})
     end.
 
-maybe_store_token_in_tds(TokenContent, IdempotentParams, Context) when
-    TokenContent =/= undefined
-->
+store_token_in_tds(TokenContent, IdempotentParams, Context) ->
     #{woody_context := WoodyCtx} = Context,
     {_ExternalID, IdempotentKey} = IdempotentParams,
     Token = #tds_Token{content = TokenContent},
@@ -422,9 +428,7 @@ maybe_store_token_in_tds(TokenContent, IdempotentParams, Context) when
     {ok, TokenID} = capi_bender:gen_by_constant(IdempotentKey, RandomID, Hash, WoodyCtx),
     Call = {tds_storage, 'PutToken', {TokenID, Token}},
     {ok, ok} = capi_handler_utils:service_call(Call, Context),
-    TokenID;
-maybe_store_token_in_tds(_, _IdempotentParams, _Context) ->
-    undefined.
+    TokenID.
 
 process_tokenized_card_data(Data, IdempotentParams, #{woody_context := WoodyCtx} = Context) ->
     Call = {get_token_provider_service_name(Data), 'Unwrap', {encode_wrapped_payment_tool(Data)}},
@@ -582,7 +586,7 @@ get_token_providers() ->
     [yandexpay, applepay, googlepay, samsungpay].
 
 get_token_service_id(TokenProvider) ->
-    TokenServices = genlib_app:env(capi_pcidss, bank_card_token_service_mapping),
+    TokenServices = genlib_app:env(?APP, bank_card_token_service_mapping),
     maps:get(TokenProvider, TokenServices).
 
 %% TODO
@@ -738,6 +742,14 @@ encode_mobile_commerce(MobilePhone, Operator) ->
         operator_deprecated = Operator,
         phone = #domain_MobilePhone{cc = Cc, ctn = Ctn}
     }.
+
+%%
+
+encode_resource_metadata(Metadata) ->
+    Namespace = genlib_app:env(?APP, payment_resource_metadata_namespace, ?DEFAULT_RESOURCE_METADATA_NAMESPACE),
+    #{genlib:to_binary(Namespace) => capi_json_marshalling:marshal(Metadata)}.
+
+%%
 
 get_bank_info(CardDataPan, Context) ->
     case capi_bankcard:lookup_bank_info(CardDataPan, Context) of

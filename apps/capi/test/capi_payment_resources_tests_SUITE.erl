@@ -637,7 +637,11 @@ create_euroset_payment_resource_ok_test(Config) ->
     }} = capi_client_tokens:create_payment_resource(?config(context, Config), #{
         <<"paymentTool">> => #{
             <<"paymentToolType">> => <<"PaymentTerminalData">>,
-            <<"provider">> => <<"euroset">>
+            <<"provider">> => <<"euroset">>,
+            <<"metadata">> => #{
+                <<"branch">> => <<"БИРЮЛЁВО"/utf8>>,
+                <<"nonsense">> => 31.337
+            }
         },
         <<"clientInfo">> => ClientInfo
     }).
