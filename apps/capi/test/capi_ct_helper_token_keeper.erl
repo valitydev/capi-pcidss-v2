@@ -6,8 +6,7 @@
 -include_lib("capi_token_keeper_data.hrl").
 
 -define(PARTY_ID, ?STRING).
--define(USER_ID, ?STRING).
--define(USER_EMAIL, <<"bla@bla.ru">>).
+-define(CONSUMER, <<"client">>).
 -define(TOKEN_LIFETIME, 259200).
 
 -type sup_or_config() :: capi_ct_helper:sup_or_config().
@@ -16,7 +15,7 @@
 
 -export([mock_token/2]).
 -export([mock_invalid_token/1]).
--export([mock_user_session_token/1]).
+-export([mock_invoice_access_token/1]).
 
 -spec mock_token(token_handler(), sup_or_config()) -> list(app_name()).
 mock_token(HandlerFun, SupOrConfig) ->
@@ -52,20 +51,15 @@ start_client(ServiceURLs) ->
 mock_invalid_token(SupOrConfig) ->
     mock_token(fun('Authenticate', {_, _}) -> {throwing, #token_keeper_InvalidToken{}} end, SupOrConfig).
 
--spec mock_user_session_token(sup_or_config()) -> list(app_name()).
-mock_user_session_token(SupOrConfig) ->
+-spec mock_invoice_access_token(sup_or_config()) -> list(app_name()).
+mock_invoice_access_token(SupOrConfig) ->
     Handler = make_authenticator_handler(fun() ->
-        UserParams = #{
-            id => ?USER_ID,
-            realm => #{id => <<"external">>},
-            email => ?USER_EMAIL
-        },
         AuthParams = #{
-            method => <<"SessionToken">>,
+            method => <<"InvoiceAccessToken">>,
             expiration => posix_to_rfc3339(lifetime_to_expiration(?TOKEN_LIFETIME)),
             token => #{id => ?STRING}
         },
-        {?TK_AUTHORITY_KEYCLOAK, create_bouncer_context(AuthParams, UserParams), user_session_metadata()}
+        {?TK_AUTHORITY_API, create_bouncer_context(AuthParams), invoice_access_metadata()}
     end),
     mock_token(Handler, SupOrConfig).
 
@@ -87,18 +81,17 @@ make_authenticator_handler(Handler) ->
 
 %%
 
-user_session_metadata() ->
+invoice_access_metadata() ->
     genlib_map:compact(#{
-        ?TK_META_USER_ID => ?USER_ID,
-        ?TK_META_USER_EMAIL => ?USER_EMAIL
+        ?TK_META_PARTY_ID => ?PARTY_ID,
+        ?TK_META_TOKEN_CONSUMER => ?CONSUMER
     }).
 
 %%
 
-create_bouncer_context(AuthParams, UserParams) ->
+create_bouncer_context(AuthParams) ->
     Fragment0 = bouncer_context_helpers:make_auth_fragment(AuthParams),
-    Fragment1 = bouncer_context_helpers:add_user(UserParams, Fragment0),
-    encode_context(Fragment1).
+    encode_context(Fragment0).
 %%
 
 encode_context(Context) ->

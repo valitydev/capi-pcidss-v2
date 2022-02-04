@@ -1,5 +1,4 @@
--define(TK_AUTHORITY_KEYCLOAK, <<"test.valitydev.keycloak">>).
--define(TK_AUTHORITY_APIKEYMGMT, <<"test.valitydev.apikeymgmt">>).
+-define(TK_AUTHORITY_API, <<"test.valitydev.api">>).
 
 -define(TK_META_PARTY_ID, <<"test.valitydev.party.id">>).
 -define(TK_META_TOKEN_CONSUMER, <<"test.valitydev.capi.consumer">>).

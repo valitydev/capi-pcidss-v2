@@ -101,7 +101,7 @@ oops_body_test(Config) ->
         ],
         Config
     ),
-    _ = capi_ct_helper_token_keeper:mock_user_session_token(Config),
+    _ = capi_ct_helper_token_keeper:mock_invoice_access_token(Config),
     _ = capi_ct_helper_bouncer:mock_arbiter(capi_ct_helper_bouncer:judge_always_allowed(), Config),
     Context = ?config(context, Config),
     Token = maps:get(token, Context),

@@ -168,18 +168,18 @@ init_per_testcase(authorization_bad_token_error_test, C) ->
     [{test_sup, SupPid} | C];
 init_per_testcase(authorization_error_no_permission_test, C) ->
     SupPid = capi_ct_helper:start_mocked_service_sup(?MODULE),
-    _ = capi_ct_helper_token_keeper:mock_user_session_token(SupPid),
+    _ = capi_ct_helper_token_keeper:mock_invoice_access_token(SupPid),
     _ = capi_ct_helper_bouncer:mock_arbiter(capi_ct_helper_bouncer:judge_always_forbidden(), SupPid),
     [{test_sup, SupPid} | C];
 init_per_testcase(ip_replacement_restricted_test, C) ->
     SupPid = capi_ct_helper:start_mocked_service_sup(?MODULE),
-    _ = capi_ct_helper_token_keeper:mock_user_session_token(SupPid),
+    _ = capi_ct_helper_token_keeper:mock_invoice_access_token(SupPid),
     Restriction = #brstn_Restrictions{capi = #brstn_RestrictionsCommonAPI{ip_replacement_forbidden = true}},
     _ = capi_ct_helper_bouncer:mock_arbiter(capi_ct_helper_bouncer:judge_always_restricted(Restriction), SupPid),
     [{test_sup, SupPid} | C];
 init_per_testcase(_Name, C) ->
     SupPid = capi_ct_helper:start_mocked_service_sup(?MODULE),
-    _ = capi_ct_helper_token_keeper:mock_user_session_token(SupPid),
+    _ = capi_ct_helper_token_keeper:mock_invoice_access_token(SupPid),
     _ = capi_ct_helper_bouncer:mock_arbiter(capi_ct_helper_bouncer:judge_always_allowed(), SupPid),
     [{test_sup, SupPid} | C].
 
