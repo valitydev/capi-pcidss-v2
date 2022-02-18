@@ -54,6 +54,7 @@
     authorization_error_no_header_test/1,
     authorization_bad_token_error_test/1,
     authorization_error_no_permission_test/1,
+    authorization_error_wrong_token_type_test/1,
 
     payment_token_prev_test/1,
     payment_token_valid_until_test/1
@@ -129,6 +130,7 @@ groups() ->
             authorization_error_no_header_test,
             authorization_bad_token_error_test,
             authorization_error_no_permission_test,
+            authorization_error_wrong_token_type_test,
 
             payment_token_prev_test,
             payment_token_valid_until_test
@@ -164,17 +166,30 @@ end_per_group(_Group, C) ->
     ok.
 
 -spec init_per_testcase(test_case_name(), config()) -> config().
+init_per_testcase(authorization_bad_token_error_test, C) ->
+    SupPid = capi_ct_helper:start_mocked_service_sup(?MODULE),
+    _ = capi_ct_helper_token_keeper:mock_invalid_token(SupPid),
+    _ = capi_ct_helper_bouncer:mock_arbiter(capi_ct_helper_bouncer:judge_always_allowed(), SupPid),
+    [{test_sup, SupPid} | C];
 init_per_testcase(authorization_error_no_permission_test, C) ->
     SupPid = capi_ct_helper:start_mocked_service_sup(?MODULE),
+    _ = capi_ct_helper_token_keeper:mock_invoice_access_token(SupPid),
+    _ = capi_ct_helper_bouncer:mock_arbiter(capi_ct_helper_bouncer:judge_always_forbidden(), SupPid),
+    [{test_sup, SupPid} | C];
+init_per_testcase(authorization_error_wrong_token_type_test, C) ->
+    SupPid = capi_ct_helper:start_mocked_service_sup(?MODULE),
+    _ = capi_ct_helper_token_keeper:mock_user_session_token(SupPid),
     _ = capi_ct_helper_bouncer:mock_arbiter(capi_ct_helper_bouncer:judge_always_forbidden(), SupPid),
     [{test_sup, SupPid} | C];
 init_per_testcase(ip_replacement_restricted_test, C) ->
     SupPid = capi_ct_helper:start_mocked_service_sup(?MODULE),
+    _ = capi_ct_helper_token_keeper:mock_invoice_access_token(SupPid),
     Restriction = #brstn_Restrictions{capi = #brstn_RestrictionsCommonAPI{ip_replacement_forbidden = true}},
     _ = capi_ct_helper_bouncer:mock_arbiter(capi_ct_helper_bouncer:judge_always_restricted(Restriction), SupPid),
     [{test_sup, SupPid} | C];
 init_per_testcase(_Name, C) ->
     SupPid = capi_ct_helper:start_mocked_service_sup(?MODULE),
+    _ = capi_ct_helper_token_keeper:mock_invoice_access_token(SupPid),
     _ = capi_ct_helper_bouncer:mock_arbiter(capi_ct_helper_bouncer:judge_always_allowed(), SupPid),
     [{test_sup, SupPid} | C].
 
@@ -1112,6 +1127,14 @@ authorization_bad_token_error_test(Config) ->
 -spec authorization_error_no_permission_test(config()) -> _.
 authorization_error_no_permission_test(_Config) ->
     Token = capi_ct_helper:issue_token(?DISTANT_TIMESTAMP),
+    ?badresp(401) = capi_client_tokens:create_payment_resource(
+        capi_ct_helper:get_context(Token),
+        ?TEST_PAYMENT_TOOL_ARGS
+    ).
+
+-spec authorization_error_wrong_token_type_test(config()) -> _.
+authorization_error_wrong_token_type_test(_Config) ->
+    Token = capi_ct_helper:issue_token(unlimited),
     ?badresp(401) = capi_client_tokens:create_payment_resource(
         capi_ct_helper:get_context(Token),
         ?TEST_PAYMENT_TOOL_ARGS

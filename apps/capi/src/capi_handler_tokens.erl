@@ -38,7 +38,7 @@ prepare('CreatePaymentResource' = OperationID, Req, Context) ->
             {operation, #{id => OperationID, party => PartyID, client_info => #{ip => ReplacementIP}}},
             {payment_tool, prepare_payment_tool_prototype(Params)}
         ],
-        {ok, capi_auth:authorize_operation(Prototypes, Context, Req)}
+        {ok, capi_auth:authorize_operation(Prototypes, Context)}
     end,
     Process = fun(Resolution) ->
         process_request(OperationID, Req, Context, Resolution)

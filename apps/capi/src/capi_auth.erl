@@ -1,52 +1,60 @@
 -module(capi_auth).
 
+-define(APP, capi_pcidss).
+
+%% API functions
+
 -export([get_subject_id/1]).
--export([get_subject_data/1]).
--export([get_subject_email/1]).
+-export([get_party_id/1]).
+-export([get_user_id/1]).
+-export([get_user_email/1]).
 
 -export([preauthorize_api_key/1]).
 -export([authorize_api_key/3]).
--export([extract_auth_context/1]).
+-export([authorize_operation/2]).
 
--export([authorize_operation/3]).
+%% API types
 
 -type token_type() :: bearer.
 -type preauth_context() :: {unauthorized, {token_type(), token_keeper_client:token()}}.
--type auth_context() ::
-    {authorized, #{
-        auth_data => token_keeper_auth_data:auth_data()
-    }}.
+-type auth_context() :: {authorized, token_keeper_client:auth_data()}.
+-type resolution() :: bouncer_client:judgement().
 
--type resolution() :: bouncer_client:judgement() | undefined.
-
--export_type([resolution/0]).
 -export_type([preauth_context/0]).
 -export_type([auth_context/0]).
+-export_type([resolution/0]).
+
+%% Internal types
 
 -define(authorized(Ctx), {authorized, Ctx}).
 -define(unauthorized(Ctx), {unauthorized, Ctx}).
 
--define(APP, capi_pcidss).
+%%
+%% API functions
+%%
 
 -spec get_subject_id(auth_context()) -> binary() | undefined.
-get_subject_id(?authorized(#{auth_data := AuthData})) ->
-    case get_party_id(AuthData) of
+get_subject_id(AuthContext) ->
+    case get_party_id(AuthContext) of
         PartyId when is_binary(PartyId) ->
             PartyId;
         undefined ->
-            get_user_id(AuthData)
+            get_user_id(AuthContext)
     end.
 
--spec get_subject_data(auth_context()) -> #{atom() => binary()}.
-get_subject_data(?authorized(#{auth_data := AuthData})) ->
-    genlib_map:compact(#{
-        user_id => get_user_id(AuthData),
-        party_id => get_party_id(AuthData)
-    }).
+-spec get_party_id(auth_context()) -> binary() | undefined.
+get_party_id(?authorized(#{metadata := Metadata})) ->
+    get_metadata(get_metadata_mapped_key(party_id), Metadata).
 
--spec get_subject_email(auth_context()) -> binary() | undefined.
-get_subject_email(?authorized(#{auth_data := AuthData})) ->
-    get_user_email(AuthData).
+-spec get_user_id(auth_context()) -> binary() | undefined.
+get_user_id(?authorized(#{metadata := Metadata})) ->
+    get_metadata(get_metadata_mapped_key(user_id), Metadata).
+
+-spec get_user_email(auth_context()) -> binary() | undefined.
+get_user_email(?authorized(#{metadata := Metadata})) ->
+    get_metadata(get_metadata_mapped_key(user_email), Metadata).
+
+%%
 
 -spec preauthorize_api_key(swag_server:api_key()) -> {ok, preauth_context()} | {error, _Reason}.
 preauthorize_api_key(ApiKey) ->
@@ -62,75 +70,48 @@ parse_api_key(<<"Bearer ", Token/binary>>) ->
 parse_api_key(_) ->
     {error, unsupported_auth_scheme}.
 
--spec authorize_api_key(preauth_context(), token_keeper_client:source_context(), woody_context:ctx()) ->
+-spec authorize_api_key(preauth_context(), token_keeper_client:token_context(), woody_context:ctx()) ->
     {ok, auth_context()} | {error, _Reason}.
 authorize_api_key(?unauthorized({TokenType, Token}), TokenContext, WoodyContext) ->
     authorize_token_by_type(TokenType, Token, TokenContext, WoodyContext).
 
-authorize_token_by_type(bearer = _TokenType, Token, TokenContext, WoodyContext) ->
-    case token_keeper_client:get_by_token(Token, TokenContext, WoodyContext) of
+authorize_token_by_type(bearer, Token, TokenContext, WoodyContext) ->
+    Authenticator = token_keeper_client:authenticator(WoodyContext),
+    case token_keeper_authenticator:authenticate(Token, TokenContext, Authenticator) of
         {ok, AuthData} ->
-            {ok, {authorized, #{auth_data => AuthData}}};
-        {error, _} = TokenKeeperError ->
-            TokenKeeperError
+            {ok, ?authorized(AuthData)};
+        {error, TokenKeeperError} ->
+            _ = logger:warning("Token keeper authorization failed: ~p", [TokenKeeperError]),
+            {error, {auth_failed, TokenKeeperError}}
     end.
-
--spec extract_auth_context(capi_handler:processing_context()) -> auth_context().
-extract_auth_context(#{swagger_context := #{auth_context := AuthContext}}) ->
-    AuthContext.
-
-get_auth_data(?authorized(AuthContext)) ->
-    maps:get(auth_data, AuthContext, undefined).
 
 -spec authorize_operation(
     Prototypes :: capi_bouncer_context:prototypes(),
-    Context :: capi_handler:processing_context(),
-    Req :: capi_handler:request_data()
-) -> resolution() | no_return().
-authorize_operation(
-    Prototypes,
-    ProcessingContext,
-    _Req
-) ->
+    ProcessingContext :: capi_handler:processing_context()
+) -> resolution().
+authorize_operation(Prototypes, ProcessingContext) ->
     AuthContext = extract_auth_context(ProcessingContext),
-    do_authorize_operation(Prototypes, get_auth_data(AuthContext), ProcessingContext).
-
-do_authorize_operation(_, undefined, _) ->
-    undefined;
-do_authorize_operation(Prototypes, AuthData, #{swagger_context := ReqCtx, woody_context := WoodyCtx}) ->
-    FragmentsAcc = capi_bouncer:gather_context_fragments(
-        get_token_keeper_fragment(AuthData),
-        get_user_id(AuthData),
-        ReqCtx,
-        WoodyCtx
+    #{swagger_context := SwagContext, woody_context := WoodyContext} = ProcessingContext,
+    Fragments = capi_bouncer:gather_context_fragments(
+        get_token_keeper_fragment(AuthContext),
+        get_user_id(AuthContext),
+        SwagContext,
+        WoodyContext
     ),
-    Fragments = capi_bouncer_context:build(Prototypes, FragmentsAcc, WoodyCtx),
-    try
-        capi_bouncer:judge(Fragments, WoodyCtx)
-    catch
-        error:{woody_error, _Error} ->
-            % TODO
-            % This is temporary safeguard around bouncer integration put here so that
-            % external requests would remain undisturbed by bouncer intermittent failures.
-            % We need to remove it as soon as these two points come true:
-            % * bouncer proves to be stable enough,
-            % * capi starts depending on bouncer exclusively for authz decisions.
-            undefined
-    end.
+    Fragments1 = capi_bouncer_context:build(Prototypes, Fragments, WoodyContext),
+    capi_bouncer:judge(Fragments1, WoodyContext).
 
-get_token_keeper_fragment(AuthData) ->
-    token_keeper_auth_data:get_context_fragment(AuthData).
+extract_auth_context(#{swagger_context := #{auth_context := AuthContext}}) ->
+    AuthContext.
 
 %%
+%% Internal functions
+%%
 
-get_party_id(AuthData) ->
-    get_metadata(get_metadata_mapped_key(party_id), token_keeper_auth_data:get_metadata(AuthData)).
+get_token_keeper_fragment(?authorized(#{context := Context})) ->
+    Context.
 
-get_user_id(AuthData) ->
-    get_metadata(get_metadata_mapped_key(user_id), token_keeper_auth_data:get_metadata(AuthData)).
-
-get_user_email(AuthData) ->
-    get_metadata(get_metadata_mapped_key(user_email), token_keeper_auth_data:get_metadata(AuthData)).
+%%
 
 get_metadata(Key, Metadata) ->
     maps:get(Key, Metadata, undefined).

@@ -48,8 +48,14 @@
 ).
 
 %%
+
 -type config() :: [{atom(), any()}].
 -type app_name() :: atom().
+-type sup_or_config() :: config() | pid().
+
+-export_type([config/0]).
+-export_type([app_name/0]).
+-export_type([sup_or_config/0]).
 
 -spec init_suite(module(), config()) -> config().
 init_suite(Module, Config) ->
@@ -101,9 +107,8 @@ init_suite(Module, Config, CapiEnv) ->
             {cache_update_interval, 50000}
         ]),
     Capi = start_capi(Config, CapiEnv),
-    TokenKeeperApp = start_token_keeper(SupPid, Config),
     BouncerApp = capi_ct_helper_bouncer:mock_client(SupPid),
-    Apps = lists:reverse(Capi ++ DmtClient ++ WoodyApp ++ ScoperApp ++ BouncerApp ++ TokenKeeperApp),
+    Apps = lists:reverse(Capi ++ DmtClient ++ WoodyApp ++ ScoperApp ++ BouncerApp),
     [{apps, Apps}, {suite_test_sup, SupPid} | Config].
 
 -spec start_app(app_name()) -> [app_name()].
@@ -121,11 +126,6 @@ start_app(AppName) ->
 -spec start_app(app_name(), list()) -> [app_name()].
 start_app(AppName, Env) ->
     genlib_app:start_application_with(AppName, Env).
-
--spec start_token_keeper(pid(), config()) -> [app_name()].
-start_token_keeper(SupPid, Config) ->
-    ok = capi_ct_helper_token_keeper:configure_uac(Config),
-    capi_ct_helper_token_keeper:mock_client(capi_ct_helper_token_keeper:user_session_handler(), SupPid).
 
 -spec start_capi(config()) -> [app_name()].
 start_capi(Config) ->

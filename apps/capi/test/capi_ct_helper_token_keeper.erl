@@ -1,158 +1,33 @@
 -module(capi_ct_helper_token_keeper).
 
+-include_lib("capi_dummy_data.hrl").
 -include_lib("token_keeper_proto/include/tk_token_keeper_thrift.hrl").
 -include_lib("token_keeper_proto/include/tk_context_thrift.hrl").
-
 -include_lib("capi_token_keeper_data.hrl").
 
--export([configure_uac/1]).
--export([mock_client/2]).
+-define(PARTY_ID, ?STRING).
+-define(USER_ID, ?STRING).
+-define(USER_EMAIL, <<"bla@bla.ru">>).
+-define(CONSUMER, <<"client">>).
+-define(TOKEN_LIFETIME, 259200).
 
--export([not_found_handler/0]).
+-type sup_or_config() :: capi_ct_helper:sup_or_config().
+-type app_name() :: capi_ct_helper:app_name().
+-type token_handler() :: fun(('Authenticate' | 'Create', tuple()) -> term() | no_return()).
 
--export([user_session_handler/0]).
--export([api_key_handler/1]).
--export([invoice_access_token/2]).
--export([invoice_template_access_token/2]).
--export([customer_access_token/2]).
+-export([mock_token/2]).
+-export([mock_invalid_token/1]).
+-export([mock_invoice_access_token/1]).
+-export([mock_user_session_token/1]).
 
--export([make_handler_fun/3]).
-
-% TODO ED-208
-% При стабилизации api создания токенов в token keeper - следует удалить uac и ключи.
-% Сейчас они необходимы тут для распаковки legacy токенов заданных в capi_ct_helper:issue_token
--spec configure_uac(list(tuple())) -> ok.
-configure_uac(Config) ->
-    _ = genlib_app:start_application(uac),
-    uac:configure(#{
-        access => #{
-            domain_name => <<"common-api">>,
-            resource_hierarchy => #{payment_resources => #{}}
-        },
-        jwt => #{
-            keyset => #{
-                capi_pcidss => #{
-                    source => {pem_file, capi_ct_helper:get_keysource("keys/local/private.pem", Config)},
-                    metadata => #{
-                        auth_method => user_session_token,
-                        user_realm => <<"external">>
-                    }
-                }
-            }
-        }
-    }).
-
--dialyzer({no_return, not_found_handler/0}).
--spec not_found_handler() -> handler_fun().
-not_found_handler() ->
-    fun('GetByToken', {_, _}) ->
-        woody_error:raise(business, #token_keeper_AuthDataNotFound{})
-    end.
-
--spec user_session_handler() -> handler_fun().
-user_session_handler() ->
-    make_handler_fun(
-        ?TK_AUTHORITY_KEYCLOAK,
-        [
-            {user, [id, email, realm]},
-            {auth, [{method, <<"SessionToken">>}, expiration, token]}
-        ],
-        [user_session_meta]
-    ).
-
--spec invoice_access_token(PartyID :: binary(), InvoiceID :: binary()) -> handler_fun().
-invoice_access_token(PartyID, InvoiceID) ->
-    make_handler_fun(
-        <<"com.rbkmoney.capi">>,
-        [
-            {auth, [
-                {method, <<"InvoiceAccessToken">>},
-                expiration,
-                token,
-                {scope, [[{party, PartyID}, {invoice, InvoiceID}]]}
-            ]}
-        ],
-        [api_key_meta, consumer_meta]
-    ).
-
--spec invoice_template_access_token(PartyID :: binary(), InvoiceTmeplateID :: binary()) -> handler_fun().
-invoice_template_access_token(PartyID, InvoiceTmeplateID) ->
-    make_handler_fun(
-        <<"com.rbkmoney.capi">>,
-        [
-            {auth, [
-                {method, <<"InvoiceTemplateAccessToken">>},
-                expiration,
-                token,
-                {scope, [[{party, PartyID}, {invoice_template, InvoiceTmeplateID}]]}
-            ]}
-        ],
-        [api_key_meta]
-    ).
-
--spec customer_access_token(PartyID :: binary(), CustomerID :: binary()) -> handler_fun().
-customer_access_token(PartyID, CustomerID) ->
-    make_handler_fun(
-        <<"com.rbkmoney.capi">>,
-        [
-            {auth, [
-                {method, <<"CustomerAccessToken">>},
-                expiration,
-                token,
-                {scope, [[{party, PartyID}, {customer, CustomerID}]]}
-            ]}
-        ],
-        [api_key_meta]
-    ).
-
--spec api_key_handler(PartyID :: binary()) -> handler_fun().
-api_key_handler(PartyID) ->
-    make_handler_fun(
-        ?TK_AUTHORITY_APIKEYMGMT,
-        [
-            {auth, [
-                {method, <<"ApiKeyToken">>},
-                token,
-                {scope, [[{party, PartyID}]]}
-            ]}
-        ],
-        [api_key_meta]
-    ).
-
--type operation_id() :: 'GetByToken'.
--type args() :: tuple().
--type handler_return() :: term() | no_return().
--type handler_fun() :: fun((operation_id(), args()) -> handler_return()).
-
--spec make_handler_fun(Authority :: binary(), ContextSpec :: any(), MetadataSpec :: any()) -> handler_fun().
-make_handler_fun(Authority, ContextSpec, MetadataSpec) ->
-    fun('GetByToken', {Token, _}) ->
-        case uac_authorizer_jwt:verify(Token, #{}) of
-            {ok, TokenInfo} ->
-                AuthData = #token_keeper_AuthData{
-                    token = Token,
-                    status = active,
-                    context = encode_context(create_context(TokenInfo, ContextSpec)),
-                    authority = Authority,
-                    metadata = create_metadata(TokenInfo, MetadataSpec)
-                },
-                {ok, AuthData};
-            {error, Error} ->
-                _ = logger:warning("Token-keeper ct-helper could not verify the token: ~p", [Error]),
-                woody_error:raise(business, #token_keeper_AuthDataNotFound{})
-        end
-    end.
-
-%%
-
--spec mock_client(_, _) -> _.
-mock_client(HandlerFun, SupOrConfig) ->
+-spec mock_token(token_handler(), sup_or_config()) -> list(app_name()).
+mock_token(HandlerFun, SupOrConfig) ->
     start_client(
         capi_ct_helper:mock_services_(
             [
                 {
-                    token_keeper,
-                    {tk_token_keeper_thrift, 'TokenKeeper'},
+                    token_authenticator,
+                    {tk_token_keeper_thrift, 'TokenAuthenticator'},
                     HandlerFun
                 }
             ],
@@ -162,142 +37,94 @@ mock_client(HandlerFun, SupOrConfig) ->
 
 start_client(ServiceURLs) ->
     capi_ct_helper:start_app(token_keeper_client, [
-        {service_client, #{
-            url => maps:get(token_keeper, ServiceURLs)
+        {service_clients, #{
+            authenticator => #{
+                url => maps:get(token_authenticator, ServiceURLs)
+            },
+            authorities => #{
+                ephemeral => #{},
+                offline => #{}
+            }
         }}
     ]).
 
 %%
 
-create_context(TokenInfo, Specs) ->
-    lists:foldl(
-        fun(Spec, Context) ->
-            add_by_spec(Spec, TokenInfo, Context)
-        end,
-        bouncer_context_helpers:empty(),
-        Specs
-    ).
+-spec mock_invalid_token(sup_or_config()) -> list(app_name()).
+mock_invalid_token(SupOrConfig) ->
+    mock_token(fun('Authenticate', {_, _}) -> {throwing, #token_keeper_InvalidToken{}} end, SupOrConfig).
 
-add_by_spec({user, UserSpec}, TokenInfo, Context) ->
-    bouncer_context_helpers:add_user(
-        assemble_user_fragment(UserSpec, TokenInfo),
-        Context
-    );
-add_by_spec({auth, AuthSpec}, TokenInfo, Context) ->
-    bouncer_context_helpers:add_auth(
-        assemble_auth_fragment(AuthSpec, TokenInfo),
-        Context
-    ).
+-spec mock_invoice_access_token(sup_or_config()) -> list(app_name()).
+mock_invoice_access_token(SupOrConfig) ->
+    Handler = make_authenticator_handler(fun() ->
+        AuthParams = #{
+            method => <<"InvoiceAccessToken">>,
+            expiration => posix_to_rfc3339(lifetime_to_expiration(?TOKEN_LIFETIME)),
+            token => #{id => ?STRING}
+        },
+        {?TK_AUTHORITY_API, create_bouncer_context(AuthParams), invoice_access_metadata()}
+    end),
+    mock_token(Handler, SupOrConfig).
 
-assemble_user_fragment(UserSpec, TokenInfo) ->
-    lists:foldl(
-        fun(SpecFragment, Acc0) ->
-            FragName = get_user_fragment_name(SpecFragment, TokenInfo),
-            Acc0#{FragName => get_user_fragment_value(SpecFragment, TokenInfo)}
-        end,
-        #{},
-        UserSpec
-    ).
+-spec mock_user_session_token(sup_or_config()) -> list(app_name()).
+mock_user_session_token(SupOrConfig) ->
+    Handler = make_authenticator_handler(fun() ->
+        UserParams = #{
+            id => ?USER_ID,
+            realm => #{id => <<"external">>},
+            email => ?USER_EMAIL
+        },
+        AuthParams = #{
+            method => <<"SessionToken">>,
+            expiration => posix_to_rfc3339(lifetime_to_expiration(?TOKEN_LIFETIME)),
+            token => #{id => ?STRING}
+        },
+        {?TK_AUTHORITY_KEYCLOAK, create_bouncer_context(AuthParams, UserParams), user_session_metadata()}
+    end),
+    mock_token(Handler, SupOrConfig).
 
-get_user_fragment_name(Atom, _TokenInfo) when is_atom(Atom) ->
-    Atom;
-get_user_fragment_name({Atom, _Spec}, _TokenInfo) when is_atom(Atom) ->
-    Atom.
+%%
 
-get_user_fragment_value(id, TokenInfo) ->
-    uac_authorizer_jwt:get_subject_id(TokenInfo);
-get_user_fragment_value({id, ID}, _TokenInfo) ->
-    ID;
-get_user_fragment_value(email, TokenInfo) ->
-    uac_authorizer_jwt:get_subject_email(TokenInfo);
-get_user_fragment_value({email, Email}, _TokenInfo) ->
-    Email;
-get_user_fragment_value(realm, _TokenInfo) ->
-    #{id => <<"external">>};
-get_user_fragment_value({realm, RealmID}, _TokenInfo) ->
-    #{id => RealmID}.
+-spec make_authenticator_handler(function()) -> token_handler().
+make_authenticator_handler(Handler) ->
+    fun('Authenticate', {Token, _}) ->
+        {Authority, ContextFragment, Metadata} = Handler(),
+        AuthData = #token_keeper_AuthData{
+            token = Token,
+            status = active,
+            context = ContextFragment,
+            authority = Authority,
+            metadata = Metadata
+        },
+        {ok, AuthData}
+    end.
 
-assemble_auth_fragment(AuthSpec, TokenInfo) ->
-    lists:foldl(
-        fun(SpecFragment, Acc0) ->
-            FragName = get_auth_fragment_name(SpecFragment, TokenInfo),
-            Acc0#{FragName => get_auth_fragment_value(SpecFragment, TokenInfo)}
-        end,
-        #{},
-        AuthSpec
-    ).
+%%
 
-get_auth_fragment_name(Atom, _TokenInfo) when is_atom(Atom) ->
-    Atom;
-get_auth_fragment_name({Atom, _Spec}, _TokenInfo) when is_atom(Atom) ->
-    Atom.
-
-get_auth_fragment_value(method, _TokenInfo) ->
-    <<"SessionToken">>;
-get_auth_fragment_value({method, Method}, _TokenInfo) ->
-    Method;
-get_auth_fragment_value(expiration, TokenInfo) ->
-    Expiration = uac_authorizer_jwt:get_expires_at(TokenInfo),
-    make_auth_expiration(Expiration);
-get_auth_fragment_value({expiration, Expiration}, _TokenInfo) ->
-    make_auth_expiration(Expiration);
-get_auth_fragment_value(token, TokenInfo) ->
-    #{id => uac_authorizer_jwt:get_token_id(TokenInfo)};
-get_auth_fragment_value({token, ID}, _TokenInfo) ->
-    #{id => ID};
-get_auth_fragment_value(scope, TokenInfo) ->
-    [#{party => #{id => uac_authorizer_jwt:get_subject_id(TokenInfo)}}];
-get_auth_fragment_value({scope, ScopeSpecs}, TokenInfo) ->
-    lists:foldl(
-        fun(ScopeSpec, Acc0) ->
-            [assemble_auth_scope_fragment(ScopeSpec, TokenInfo) | Acc0]
-        end,
-        [],
-        ScopeSpecs
-    ).
-
-assemble_auth_scope_fragment(ScopeSpec, TokenInfo) ->
-    lists:foldl(
-        fun(SpecFragment, Acc0) ->
-            FragName = get_auth_scope_fragment_name(SpecFragment, TokenInfo),
-            Acc0#{FragName => get_auth_scope_fragment_value(SpecFragment, TokenInfo)}
-        end,
-        #{},
-        ScopeSpec
-    ).
-
-get_auth_scope_fragment_name(Atom, _TokenInfo) when is_atom(Atom) ->
-    Atom;
-get_auth_scope_fragment_name({Atom, _Spec}, _TokenInfo) when is_atom(Atom) ->
-    Atom.
-
-get_auth_scope_fragment_value(party, TokenInfo) ->
-    #{id => uac_authorizer_jwt:get_subject_id(TokenInfo)};
-get_auth_scope_fragment_value({Name, EntityID}, _TokenInfo) when is_atom(Name) ->
-    #{id => EntityID}.
-
-create_metadata(TokenInfo, MetadataSpec) ->
-    lists:foldl(
-        fun(SpecFragment, Acc0) ->
-            maps:merge(Acc0, make_metadata_by_spec(SpecFragment, TokenInfo))
-        end,
-        #{},
-        MetadataSpec
-    ).
-
-make_metadata_by_spec(user_session_meta, TokenInfo) ->
+invoice_access_metadata() ->
     genlib_map:compact(#{
-        ?TK_META_USER_ID => uac_authorizer_jwt:get_subject_id(TokenInfo),
-        ?TK_META_USER_EMAIL => uac_authorizer_jwt:get_subject_email(TokenInfo)
-    });
-make_metadata_by_spec(api_key_meta, TokenInfo) ->
-    #{
-        ?TK_META_PARTY_ID => uac_authorizer_jwt:get_subject_id(TokenInfo)
-    };
-make_metadata_by_spec(consumer_meta, TokenInfo) ->
-    genlib_map:compact(#{
-        ?TK_META_TOKEN_CONSUMER => uac_authorizer_jwt:get_claim(<<"cons">>, TokenInfo, undefined)
+        ?TK_META_PARTY_ID => ?PARTY_ID,
+        ?TK_META_TOKEN_CONSUMER => ?CONSUMER
     }).
+
+user_session_metadata() ->
+    genlib_map:compact(#{
+        ?TK_META_USER_ID => ?USER_ID,
+        ?TK_META_USER_EMAIL => ?USER_EMAIL
+    }).
+
+%%
+
+create_bouncer_context(AuthParams) ->
+    Fragment0 = bouncer_context_helpers:make_auth_fragment(AuthParams),
+    encode_context(Fragment0).
+
+create_bouncer_context(AuthParams, UserParams) ->
+    Fragment0 = bouncer_context_helpers:make_auth_fragment(AuthParams),
+    Fragment1 = bouncer_context_helpers:add_user(UserParams, Fragment0),
+    encode_context(Fragment1).
+
+%%
 
 encode_context(Context) ->
     #bctx_ContextFragment{
@@ -313,9 +140,10 @@ encode_context_content(Context) ->
             thrift_strict_binary_codec:close(Codec1)
     end.
 
-%% Internal functions
+%%
 
-make_auth_expiration(Timestamp) when is_integer(Timestamp) ->
-    genlib_rfc3339:format(Timestamp, second);
-make_auth_expiration(unlimited) ->
-    undefined.
+lifetime_to_expiration(Lt) when is_integer(Lt) ->
+    genlib_time:unow() + Lt.
+
+posix_to_rfc3339(Timestamp) when is_integer(Timestamp) ->
+    genlib_rfc3339:format(Timestamp, second).

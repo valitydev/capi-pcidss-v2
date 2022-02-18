@@ -178,7 +178,7 @@ make_token_context(#{cowboy_req := CowboyReq}) ->
         Origin when is_binary(Origin) ->
             #{request_origin => Origin};
         undefined ->
-            undefined
+            #{}
     end.
 
 create_processing_context(OperationID, SwaggerContext, WoodyContext) ->
@@ -203,7 +203,7 @@ collect_user_identity(AuthContext) ->
     genlib_map:compact(#{
         id => capi_auth:get_subject_id(AuthContext),
         realm => ?REALM,
-        email => capi_auth:get_subject_email(AuthContext)
+        email => capi_auth:get_user_email(AuthContext)
     }).
 
 attach_deadline(#{'X-Request-Deadline' := undefined}, Context) ->
@@ -242,7 +242,10 @@ set_context_meta(Context) ->
     AuthContext = capi_handler_utils:get_auth_context(Context),
     Meta = #{
         metadata => #{
-            'user-identity' => capi_auth:get_subject_data(AuthContext)
+            'user-identity' => genlib_map:compact(#{
+                user_id => capi_auth:get_user_id(AuthContext),
+                party_id => capi_auth:get_party_id(AuthContext)
+            })
         }
     },
     scoper:add_meta(Meta).
