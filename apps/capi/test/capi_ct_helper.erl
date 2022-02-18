@@ -37,6 +37,16 @@
     }}
 ).
 
+-define(PAYMENT_SERVICE_REF(ID), {payment_service, #domain_PaymentServiceRef{id = ID}}).
+-define(PAYMENT_SERVICE_OBJ(ID),
+    {payment_service, #domain_PaymentServiceObject{
+        ref = #domain_PaymentServiceRef{id = ID},
+        data = #domain_PaymentService{
+            name = ID
+        }
+    }}
+).
+
 %%
 
 -type config() :: [{atom(), any()}].
@@ -74,6 +84,14 @@ init_suite(Module, Config, CapiEnv) ->
                                 ?PAYMENT_SYSTEM_OBJ(
                                     <<"MASTERCARD">>,
                                     bankcard_validator_legacy:get_payment_system_ruleset(<<"MASTERCARD">>)
+                                ),
+                            ?PAYMENT_SERVICE_REF(<<"qiwi">>) =>
+                                ?PAYMENT_SERVICE_OBJ(
+                                    <<"qiwi">>
+                                ),
+                            ?PAYMENT_SERVICE_REF(<<"euroset">>) =>
+                                ?PAYMENT_SERVICE_OBJ(
+                                    <<"euroset">>
                                 )
                         }
                     }}

@@ -40,6 +40,7 @@
     create_qw_payment_resource_with_access_token_generates_different_payment_token/1,
     create_qw_payment_resource_with_access_token_depends_on_external_id/1,
     create_crypto_payment_resource_ok_test/1,
+    create_nonexistent_provider_payment_resource_fails_test/1,
     create_applepay_tokenized_payment_resource_ok_test/1,
     create_googlepay_tokenized_payment_resource_ok_test/1,
     create_googlepay_plain_payment_resource_ok_test/1,
@@ -74,7 +75,8 @@
     <<"clientInfo">> => #{<<"fingerprint">> => <<"test fingerprint">>}
 }).
 
--define(badresp(Code), {error, {Code, #{}}}).
+-define(badresp(Status), {error, {Status, #{}}}).
+-define(badresp(Status, Code), {error, {Status, #{<<"code">> := Code}}}).
 
 -type test_case_name() :: atom().
 -type config() :: [{atom(), any()}].
@@ -112,6 +114,7 @@ groups() ->
             create_qw_payment_resource_ok_test,
             create_qw_payment_resource_with_access_token_generates_different_payment_token,
             create_qw_payment_resource_with_access_token_depends_on_external_id,
+            create_nonexistent_provider_payment_resource_fails_test,
             create_crypto_payment_resource_ok_test,
             create_applepay_tokenized_payment_resource_ok_test,
             create_googlepay_tokenized_payment_resource_ok_test,
@@ -642,7 +645,11 @@ create_euroset_payment_resource_ok_test(Config) ->
     }} = capi_client_tokens:create_payment_resource(?config(context, Config), #{
         <<"paymentTool">> => #{
             <<"paymentToolType">> => <<"PaymentTerminalData">>,
-            <<"provider">> => <<"euroset">>
+            <<"provider">> => <<"euroset">>,
+            <<"metadata">> => #{
+                <<"branch">> => <<"БИРЮЛЁВО"/utf8>>,
+                <<"nonsense">> => 31.337
+            }
         },
         <<"clientInfo">> => ClientInfo
     }).
@@ -691,14 +698,13 @@ create_qw_payment_resource_ok_test(Config) ->
     {ok, #{
         <<"paymentToolDetails">> := #{
             <<"detailsType">> := <<"PaymentToolDetailsDigitalWallet">>,
-            <<"digitalWalletDetailsType">> := <<"DigitalWalletDetailsQIWI">>,
-            <<"phoneNumberMask">> := <<"+7******3210">>
+            <<"provider">> := <<"qiwi">>
         }
     }} = capi_client_tokens:create_payment_resource(?config(context, Config), #{
         <<"paymentTool">> => #{
             <<"paymentToolType">> => <<"DigitalWalletData">>,
-            <<"digitalWalletType">> => <<"DigitalWalletQIWI">>,
-            <<"phoneNumber">> => <<"+79876543210">>
+            <<"id">> => <<"+79876543210">>,
+            <<"provider">> => <<"qiwi">>
         },
         <<"clientInfo">> => ClientInfo
     }).
@@ -717,17 +723,17 @@ create_qw_payment_resource_with_access_token_generates_different_payment_token(C
     PaymentParams0 = #{
         <<"paymentTool">> => #{
             <<"paymentToolType">> => <<"DigitalWalletData">>,
-            <<"digitalWalletType">> => <<"DigitalWalletQIWI">>,
-            <<"phoneNumber">> => <<"+79876543210">>
+            <<"id">> => <<"+79876543210">>,
+            <<"provider">> => <<"qiwi">>
         },
         <<"clientInfo">> => ClientInfo
     },
     PaymentParams1 = #{
         <<"paymentTool">> => #{
             <<"paymentToolType">> => <<"DigitalWalletData">>,
-            <<"digitalWalletType">> => <<"DigitalWalletQIWI">>,
-            <<"phoneNumber">> => <<"+79876543210">>,
-            <<"accessToken">> => <<"some_token">>
+            <<"id">> => <<"+79876543210">>,
+            <<"provider">> => <<"qiwi">>,
+            <<"token">> => <<"some_token">>
         },
         <<"clientInfo">> => ClientInfo
     },
@@ -755,9 +761,9 @@ create_qw_payment_resource_with_access_token_depends_on_external_id(Config) ->
     PaymentParamsNoExtId = #{
         <<"paymentTool">> => #{
             <<"paymentToolType">> => <<"DigitalWalletData">>,
-            <<"digitalWalletType">> => <<"DigitalWalletQIWI">>,
-            <<"phoneNumber">> => <<"+79876543210">>,
-            <<"accessToken">> => <<"some_token">>
+            <<"id">> => <<"+79876543210">>,
+            <<"provider">> => <<"qiwi">>,
+            <<"token">> => <<"some_token">>
         },
         <<"clientInfo">> => ClientInfo
     },
@@ -773,6 +779,20 @@ create_qw_payment_resource_with_access_token_depends_on_external_id(Config) ->
     PaymentTool3 = decrypt_payment_tool(TokenNoExtId),
     ?assertEqual(PaymentTool1, PaymentTool2),
     ?assertNotEqual(PaymentTool1, PaymentTool3).
+
+-spec create_nonexistent_provider_payment_resource_fails_test(_) -> _.
+create_nonexistent_provider_payment_resource_fails_test(Config) ->
+    ClientInfo = #{<<"fingerprint">> => <<"fingerprint">>},
+    Provider = <<"✨NOPE✨"/utf8>>,
+    ?badresp(400, <<"invalidRequest">>) =
+        capi_client_tokens:create_payment_resource(?config(context, Config), #{
+            <<"paymentTool">> => #{
+                <<"paymentToolType">> => <<"DigitalWalletData">>,
+                <<"id">> => <<"42">>,
+                <<"provider">> => Provider
+            },
+            <<"clientInfo">> => ClientInfo
+        }).
 
 -spec create_crypto_payment_resource_ok_test(_) -> _.
 create_crypto_payment_resource_ok_test(Config) ->
@@ -996,8 +1016,8 @@ ip_replacement_allowed_test(Config) ->
     {ok, Res} = capi_client_tokens:create_payment_resource(?config(context, Config), #{
         <<"paymentTool">> => #{
             <<"paymentToolType">> => <<"DigitalWalletData">>,
-            <<"digitalWalletType">> => <<"DigitalWalletQIWI">>,
-            <<"phoneNumber">> => <<"+79876543210">>
+            <<"id">> => <<"+79876543210">>,
+            <<"provider">> => <<"qiwi">>
         },
         <<"clientInfo">> => ClientInfo
     }),
@@ -1010,8 +1030,8 @@ ip_replacement_restricted_test(Config) ->
     {ok, Res} = capi_client_tokens:create_payment_resource(?config(context, Config), #{
         <<"paymentTool">> => #{
             <<"paymentToolType">> => <<"DigitalWalletData">>,
-            <<"digitalWalletType">> => <<"DigitalWalletQIWI">>,
-            <<"phoneNumber">> => <<"+79876543210">>
+            <<"id">> => <<"+79876543210">>,
+            <<"provider">> => <<"qiwi">>
         },
         <<"clientInfo">> => ClientInfo
     }),
