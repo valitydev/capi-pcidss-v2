@@ -394,7 +394,7 @@ process_payment_terminal_data(Data) ->
     Ref = encode_payment_service_ref(maps:get(<<"provider">>, Data)),
     case validate_payment_service_ref(Ref) of
         {ok, _} ->
-            Metadata = maps:get(<<"metadata">>, Data),
+            Metadata = maps:get(<<"metadata">>, Data, undefined),
             PaymentTerminal = #domain_PaymentTerminal{
                 payment_service = Ref,
                 metadata = capi_utils:maybe(Metadata, fun encode_resource_metadata/1)

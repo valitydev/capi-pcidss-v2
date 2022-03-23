@@ -6,7 +6,7 @@ on:
       - 'master'
       - 'epic/**'
   pull_request:
-    branches: [ '**' ]
+    branches: ['**']
 
 env:
   REGISTRY: ghcr.io

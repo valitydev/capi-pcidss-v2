@@ -35,6 +35,7 @@
     create_visa_payment_resource_idemp_fail_test/1,
     create_nspkmir_payment_resource_ok_test/1,
     create_euroset_payment_resource_ok_test/1,
+    create_euroset_no_metadata_payment_resource_ok_test/1,
     create_mobile_payment_resource_ok_test/1,
     create_qw_payment_resource_ok_test/1,
     create_qw_payment_resource_with_access_token_generates_different_payment_token/1,
@@ -111,6 +112,7 @@ groups() ->
             create_visa_payment_resource_idemp_fail_test,
             create_nspkmir_payment_resource_ok_test,
             create_euroset_payment_resource_ok_test,
+            create_euroset_no_metadata_payment_resource_ok_test,
             create_mobile_payment_resource_ok_test,
             create_qw_payment_resource_ok_test,
             create_qw_payment_resource_with_access_token_generates_different_payment_token,
@@ -657,6 +659,22 @@ create_euroset_payment_resource_ok_test(Config) ->
                 <<"branch">> => <<"БИРЮЛЁВО"/utf8>>,
                 <<"nonsense">> => 31.337
             }
+        },
+        <<"clientInfo">> => ClientInfo
+    }).
+
+-spec create_euroset_no_metadata_payment_resource_ok_test(_) -> _.
+create_euroset_no_metadata_payment_resource_ok_test(Config) ->
+    ClientInfo = #{<<"fingerprint">> => <<"test fingerprint">>},
+    {ok, #{
+        <<"paymentToolDetails">> := #{
+            <<"detailsType">> := <<"PaymentToolDetailsPaymentTerminal">>,
+            <<"provider">> := <<"euroset">>
+        }
+    }} = capi_client_tokens:create_payment_resource(?config(context, Config), #{
+        <<"paymentTool">> => #{
+            <<"paymentToolType">> => <<"PaymentTerminalData">>,
+            <<"provider">> => <<"euroset">>
         },
         <<"clientInfo">> => ClientInfo
     }).
