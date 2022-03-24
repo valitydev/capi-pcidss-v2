@@ -736,7 +736,7 @@ encode_request_params(#{<<"cc">> := Cc, <<"ctn">> := Ctn}) ->
 encode_mobile_commerce(MobilePhone, Operator) ->
     #{<<"cc">> := Cc, <<"ctn">> := Ctn} = MobilePhone,
     #domain_MobileCommerce{
-        operator_deprecated = Operator,
+        operator = encode_mobile_commerce_operator(Operator),
         phone = #domain_MobilePhone{cc = Cc, ctn = Ctn}
     }.
 
@@ -745,6 +745,10 @@ encode_mobile_commerce(MobilePhone, Operator) ->
 encode_resource_metadata(Metadata) ->
     Namespace = genlib_app:env(?APP, payment_resource_metadata_namespace, ?DEFAULT_RESOURCE_METADATA_NAMESPACE),
     #{genlib:to_binary(Namespace) => capi_json_marshalling:marshal(Metadata)}.
+
+encode_mobile_commerce_operator(Operator) ->
+    OperationID = maps:get(Operator, genlib_app:env(?APP, mobile_commerce_mapping, #{})),
+    #domain_MobileOperatorRef{id = OperationID}.
 
 %%
 

@@ -712,7 +712,7 @@ create_mobile_payment_resource_ok_test(Config) ->
                 cc = <<"7">>,
                 ctn = <<"9210001122">>
             },
-            operator_deprecated = megafone
+            operator = #domain_MobileOperatorRef{id = <<"MEGAFON">>}
         },
         MobileCommerce
     ).
