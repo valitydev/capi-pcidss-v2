@@ -53,7 +53,7 @@
         cardholder_name = ?STRING,
         last_4_digits = <<"7892">>,
         card_class = debit,
-        payment_system_deprecated = mastercard
+        payment_system = #domain_PaymentSystemRef{id = <<"mastercard">>}
     },
     details = Details
 }).

@@ -292,7 +292,6 @@ expand_card_info(
     BankCard,
     #{
         payment_system := PaymentSystem,
-        payment_system_deprecated := LegacyPaymentSystem,
         bank_name := BankName,
         issuer_country := IssuerCountry,
         category := Category,
@@ -305,7 +304,6 @@ expand_card_info(
         bin = BankCard#cds_BankCard.bin,
         last_digits = BankCard#cds_BankCard.last_digits,
         payment_system = #domain_PaymentSystemRef{id = PaymentSystem},
-        payment_system_deprecated = LegacyPaymentSystem,
         issuer_country = IssuerCountry,
         category = Category,
         bank_name = BankName,
@@ -536,7 +534,6 @@ process_tokenized_card_data_result(
         bin = get_tokenized_bin(PaymentData),
         last_digits = get_tokenized_pan(Last4, PaymentData),
         payment_token = #domain_BankCardTokenServiceRef{id = TokenServiceID},
-        token_provider_deprecated = TokenProvider,
         is_cvv_empty = set_is_empty_cvv(TokenizationMethod, BankCard),
         exp_date = encode_exp_date(genlib_map:get(exp_date, ExtraCardData)),
         cardholder_name = genlib_map:get(cardholder, ExtraCardData),
@@ -706,7 +703,7 @@ encode_tokenized_session_data(#paytoolprv_UnwrappedPaymentTool{
 
 process_crypto_wallet_data(Data) ->
     #{<<"cryptoCurrency">> := CryptoCurrency} = Data,
-    {crypto_currency_deprecated, capi_handler_decoder:convert_crypto_currency_from_swag(CryptoCurrency)}.
+    {crypto_currency, capi_handler_encoder:encode_crypto_currency(CryptoCurrency)}.
 
 %%
 
