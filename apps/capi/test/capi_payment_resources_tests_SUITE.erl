@@ -57,7 +57,6 @@
     authorization_error_no_permission_test/1,
     authorization_error_wrong_token_type_test/1,
 
-    payment_token_prev_test/1,
     payment_token_valid_until_test/1
 ]).
 
@@ -134,7 +133,6 @@ groups() ->
             authorization_error_no_permission_test,
             authorization_error_wrong_token_type_test,
 
-            payment_token_prev_test,
             payment_token_valid_until_test
         ]}
     ].
@@ -1158,30 +1156,6 @@ authorization_error_wrong_token_type_test(_Config) ->
         capi_ct_helper:get_context(Token),
         ?TEST_PAYMENT_TOOL_ARGS
     ).
-
--spec payment_token_prev_test(config()) -> _.
-payment_token_prev_test(_Config) ->
-    PaymentToolToken = <<
-        "v2.eyJhbGciOiJFQ0RILUVTIiwiZW5jIjoiQTEyOEdDTSIsImVwayI6eyJhbGciOiJFQ0RILUVTIiwiY3J2IjoiUC0yNTYiLCJrdHkiOi"
-        "JFQyIsInVzZSI6ImVuYyIsIngiOiJ1ODNOVXpSWGtPU2VoRlcwdktLeEk3TlU1OGhZdUhqTFNtazJ2bldPQzIwIiwieSI6IjltRjhhamc"
-        "tYXVaMUp4RlZSdHhWQTlqYU83WWppMnBZT0I2M0RYWFVUcG8ifSwia2lkIjoia3hkRDBvclZQR29BeFdycUFNVGVRMFU1TVJvSzQ3dVp4"
-        "V2lTSmRnbzB0MCJ9..9O0gWgWCFJqL3rLJ.mGgBOAPCW56d1BrpCiQCcuNU6b0ej42NGtPmwIFv-Le38-HumdAuAn56nR9xhGEmTCLWyW"
-        "thrM3N7oSkXdAVJrn0eSHQq-YxvBCqH8J-D48.SKNeKddaTRF9UKvTTbWoWw"
-    >>,
-    {ok, TokenData} = capi_crypto:decode_token(PaymentToolToken),
-    #{payment_tool := PaymentTool} = TokenData,
-    #{valid_until := ValidUntil} = TokenData,
-    ?assertEqual(
-        {mobile_commerce, #domain_MobileCommerce{
-            phone = #domain_MobilePhone{
-                cc = <<"7">>,
-                ctn = <<"9210001122">>
-            },
-            operator_deprecated = megafone
-        }},
-        PaymentTool
-    ),
-    ?assertEqual(<<"2021-08-02T11:21:15.082Z">>, capi_utils:deadline_to_binary(ValidUntil)).
 
 -spec payment_token_valid_until_test(_) -> _.
 
