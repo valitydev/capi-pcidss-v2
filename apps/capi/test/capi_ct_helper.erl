@@ -159,7 +159,7 @@ start_capi(Config, ExtraEnv) ->
                     }
                 }},
                 {mobile_commerce_mapping, #{
-                    mts => <<"MTC">>,
+                    mts => <<"MTS">>,
                     beeline => <<"BEELINE">>,
                     megafone => <<"MEGAFON">>,
                     tele2 => <<"TELE2">>,

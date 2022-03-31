@@ -1,6 +1,7 @@
 -module(capi_handler_tokens).
 
 -type token_provider() :: yandexpay | applepay | googlepay | samsungpay.
+-type mobile_operator() :: mts | beeline | megafone | tele2 | yota.
 
 -include_lib("damsel/include/dmsl_domain_thrift.hrl").
 -include_lib("cds_proto/include/cds_proto_storage_thrift.hrl").
@@ -14,6 +15,7 @@
 
 -export([prepare/3]).
 -export([get_token_providers/0]).
+-export([get_mobile_operators/0]).
 
 -import(capi_handler_utils, [logic_error/2, validation_error/1]).
 
@@ -747,8 +749,12 @@ encode_resource_metadata(Metadata) ->
     #{genlib:to_binary(Namespace) => capi_json_marshalling:marshal(Metadata)}.
 
 encode_mobile_commerce_operator(Operator) ->
-    OperationID = maps:get(Operator, genlib_app:env(?APP, mobile_commerce_mapping, #{})),
-    #domain_MobileOperatorRef{id = OperationID}.
+    OperatorID = maps:get(Operator, genlib_app:env(?APP, mobile_commerce_mapping, #{})),
+    #domain_MobileOperatorRef{id = OperatorID}.
+
+-spec get_mobile_operators() -> [mobile_operator()].
+get_mobile_operators() ->
+    [mts, beeline, megafone, tele2, yota].
 
 %%
 
