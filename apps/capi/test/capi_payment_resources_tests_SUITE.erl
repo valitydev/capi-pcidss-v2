@@ -57,7 +57,6 @@
     authorization_error_no_permission_test/1,
     authorization_error_wrong_token_type_test/1,
 
-    payment_token_prev_test/1,
     payment_token_valid_until_test/1
 ]).
 
@@ -134,7 +133,6 @@ groups() ->
             authorization_error_no_permission_test,
             authorization_error_wrong_token_type_test,
 
-            payment_token_prev_test,
             payment_token_valid_until_test
         ]}
     ].
@@ -235,7 +233,7 @@ create_visa_payment_resource_ok_test(Config) ->
     {ok, #{
         <<"paymentToolDetails">> := #{
             <<"detailsType">> := <<"PaymentToolDetailsBankCard">>,
-            <<"paymentSystem">> := <<"visa">>,
+            <<"paymentSystem">> := <<"VISA">>,
             <<"last4">> := <<"1111">>,
             <<"first6">> := <<"411111">>,
             <<"cardNumberMask">> := <<"411111******1111">>
@@ -401,7 +399,7 @@ create_visa_with_empty_cvc_ok_test(Config) ->
     {ok, #{
         <<"paymentToolDetails">> := #{
             <<"detailsType">> := <<"PaymentToolDetailsBankCard">>,
-            <<"paymentSystem">> := <<"visa">>,
+            <<"paymentSystem">> := <<"VISA">>,
             <<"last4">> := <<"1111">>,
             <<"first6">> := <<"411111">>,
             <<"cardNumberMask">> := <<"411111******1111">>
@@ -509,7 +507,7 @@ create_visa_payment_resource_idemp_ok_test(Config) ->
     },
     PaymentToolDetails = #{
         <<"detailsType">> => <<"PaymentToolDetailsBankCard">>,
-        <<"paymentSystem">> => <<"visa">>,
+        <<"paymentSystem">> => <<"VISA">>,
         <<"last4">> => <<"1111">>,
         <<"first6">> => <<"411111">>,
         <<"cardNumberMask">> => <<"411111******1111">>
@@ -627,7 +625,7 @@ create_nspkmir_payment_resource_ok_test(Config) ->
     {ok, #{
         <<"paymentToolDetails">> := #{
             <<"detailsType">> := <<"PaymentToolDetailsBankCard">>,
-            <<"paymentSystem">> := <<"nspkmir">>,
+            <<"paymentSystem">> := <<"NSPK MIR">>,
             <<"cardNumberMask">> := <<"220220******8454">>,
             <<"last4">> := <<"8454">>,
             <<"first6">> := <<"220220">>
@@ -712,7 +710,7 @@ create_mobile_payment_resource_ok_test(Config) ->
                 cc = <<"7">>,
                 ctn = <<"9210001122">>
             },
-            operator_deprecated = megafone
+            operator = #domain_MobileOperatorRef{id = <<"MEGAFON">>}
         },
         MobileCommerce
     ).
@@ -855,7 +853,8 @@ create_applepay_tokenized_payment_resource_ok_test(Config) ->
     {ok, #{
         <<"paymentToolToken">> := PaymentToolToken,
         <<"paymentToolDetails">> := Details = #{
-            <<"paymentSystem">> := <<"mastercard">>,
+            <<"paymentSystem">> := <<"MASTERCARD">>,
+            <<"tokenProvider">> := <<"APPLE PAY">>,
             <<"cardNumberMask">> := <<"************7892">>,
             <<"last4">> := <<"7892">>
         }
@@ -874,7 +873,7 @@ create_applepay_tokenized_payment_resource_ok_test(Config) ->
     ?assertMatch(
         #domain_BankCard{
             tokenization_method = dpan,
-            token_provider_deprecated = applepay
+            payment_token = #domain_BankCardTokenServiceRef{id = <<"APPLE PAY">>}
         },
         BankCard
     ).
@@ -899,8 +898,8 @@ create_googlepay_tokenized_payment_resource_ok_test(Config) ->
     {ok, #{
         <<"paymentToolToken">> := PaymentToolToken,
         <<"paymentToolDetails">> := Details = #{
-            <<"paymentSystem">> := <<"mastercard">>,
-            <<"tokenProvider">> := <<"googlepay">>,
+            <<"paymentSystem">> := <<"MASTERCARD">>,
+            <<"tokenProvider">> := <<"GOOGLE PAY">>,
             <<"cardNumberMask">> := <<"************7892">>,
             <<"last4">> := <<"7892">>
         }
@@ -950,8 +949,8 @@ create_googlepay_plain_payment_resource_ok_test(Config) ->
     {ok, #{
         <<"paymentToolToken">> := PaymentToolToken,
         <<"paymentToolDetails">> := #{
-            <<"tokenProvider">> := <<"googlepay">>,
-            <<"paymentSystem">> := <<"mastercard">>,
+            <<"tokenProvider">> := <<"GOOGLE PAY">>,
+            <<"paymentSystem">> := <<"MASTERCARD">>,
             <<"cardNumberMask">> := <<"532130******7892">>,
             <<"first6">> := <<"532130">>,
             <<"last4">> := <<"7892">>
@@ -971,7 +970,7 @@ create_googlepay_plain_payment_resource_ok_test(Config) ->
     {bank_card, BankCard} = decrypt_payment_tool(PaymentToolToken),
     ?assertMatch(
         #domain_BankCard{
-            payment_system_deprecated = mastercard,
+            payment_system = #domain_PaymentSystemRef{id = <<"MASTERCARD">>},
             last_digits = <<"7892">>,
             is_cvv_empty = true,
             tokenization_method = none
@@ -999,8 +998,8 @@ create_yandexpay_tokenized_payment_resource_ok_test(Config) ->
     {ok, #{
         <<"paymentToolToken">> := EncryptedToken,
         <<"paymentToolDetails">> := Details = #{
-            <<"paymentSystem">> := <<"mastercard">>,
-            <<"tokenProvider">> := <<"yandexpay">>,
+            <<"paymentSystem">> := <<"MASTERCARD">>,
+            <<"tokenProvider">> := <<"YANDEX PAY">>,
             <<"cardNumberMask">> := <<"************7892">>,
             <<"last4">> := <<"7892">>
         }
@@ -1157,30 +1156,6 @@ authorization_error_wrong_token_type_test(_Config) ->
         capi_ct_helper:get_context(Token),
         ?TEST_PAYMENT_TOOL_ARGS
     ).
-
--spec payment_token_prev_test(config()) -> _.
-payment_token_prev_test(_Config) ->
-    PaymentToolToken = <<
-        "v2.eyJhbGciOiJFQ0RILUVTIiwiZW5jIjoiQTEyOEdDTSIsImVwayI6eyJhbGciOiJFQ0RILUVTIiwiY3J2IjoiUC0yNTYiLCJrdHkiOi"
-        "JFQyIsInVzZSI6ImVuYyIsIngiOiJ1ODNOVXpSWGtPU2VoRlcwdktLeEk3TlU1OGhZdUhqTFNtazJ2bldPQzIwIiwieSI6IjltRjhhamc"
-        "tYXVaMUp4RlZSdHhWQTlqYU83WWppMnBZT0I2M0RYWFVUcG8ifSwia2lkIjoia3hkRDBvclZQR29BeFdycUFNVGVRMFU1TVJvSzQ3dVp4"
-        "V2lTSmRnbzB0MCJ9..9O0gWgWCFJqL3rLJ.mGgBOAPCW56d1BrpCiQCcuNU6b0ej42NGtPmwIFv-Le38-HumdAuAn56nR9xhGEmTCLWyW"
-        "thrM3N7oSkXdAVJrn0eSHQq-YxvBCqH8J-D48.SKNeKddaTRF9UKvTTbWoWw"
-    >>,
-    {ok, TokenData} = capi_crypto:decode_token(PaymentToolToken),
-    #{payment_tool := PaymentTool} = TokenData,
-    #{valid_until := ValidUntil} = TokenData,
-    ?assertEqual(
-        {mobile_commerce, #domain_MobileCommerce{
-            phone = #domain_MobilePhone{
-                cc = <<"7">>,
-                ctn = <<"9210001122">>
-            },
-            operator_deprecated = megafone
-        }},
-        PaymentTool
-    ),
-    ?assertEqual(<<"2021-08-02T11:21:15.082Z">>, capi_utils:deadline_to_binary(ValidUntil)).
 
 -spec payment_token_valid_until_test(_) -> _.
 

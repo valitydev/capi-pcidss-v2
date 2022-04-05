@@ -84,9 +84,9 @@ encode_payment_tool_token_payload({digital_wallet, DigitalWallet}) ->
     {digital_wallet_payload, #ptt_DigitalWalletPayload{
         digital_wallet = DigitalWallet
     }};
-encode_payment_tool_token_payload({crypto_currency_deprecated, CryptoCurrency}) ->
+encode_payment_tool_token_payload({crypto_currency, CryptoCurrency}) ->
     {crypto_currency_payload, #ptt_CryptoCurrencyPayload{
-        crypto_currency_deprecated = CryptoCurrency
+        crypto_currency = CryptoCurrency
     }};
 encode_payment_tool_token_payload({mobile_commerce, MobileCommerce}) ->
     {mobile_commerce_payload, #ptt_MobileCommercePayload{
@@ -109,7 +109,7 @@ decode_payment_tool_token_payload(PaymentToolToken) ->
         {digital_wallet_payload, Payload} ->
             {digital_wallet, Payload#ptt_DigitalWalletPayload.digital_wallet};
         {crypto_currency_payload, Payload} ->
-            {crypto_currency_deprecated, Payload#ptt_CryptoCurrencyPayload.crypto_currency_deprecated};
+            {crypto_currency, Payload#ptt_CryptoCurrencyPayload.crypto_currency};
         {mobile_commerce_payload, Payload} ->
             {mobile_commerce, Payload#ptt_MobileCommercePayload.mobile_commerce}
     end.

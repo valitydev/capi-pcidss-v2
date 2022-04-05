@@ -1,6 +1,7 @@
 -module(capi_handler_tokens).
 
 -type token_provider() :: yandexpay | applepay | googlepay | samsungpay.
+-type mobile_operator() :: mts | beeline | megafone | tele2 | yota.
 
 -include_lib("damsel/include/dmsl_domain_thrift.hrl").
 -include_lib("cds_proto/include/cds_proto_storage_thrift.hrl").
@@ -14,6 +15,7 @@
 
 -export([prepare/3]).
 -export([get_token_providers/0]).
+-export([get_mobile_operators/0]).
 
 -import(capi_handler_utils, [logic_error/2, validation_error/1]).
 
@@ -292,7 +294,6 @@ expand_card_info(
     BankCard,
     #{
         payment_system := PaymentSystem,
-        payment_system_deprecated := LegacyPaymentSystem,
         bank_name := BankName,
         issuer_country := IssuerCountry,
         category := Category,
@@ -305,7 +306,6 @@ expand_card_info(
         bin = BankCard#cds_BankCard.bin,
         last_digits = BankCard#cds_BankCard.last_digits,
         payment_system = #domain_PaymentSystemRef{id = PaymentSystem},
-        payment_system_deprecated = LegacyPaymentSystem,
         issuer_country = IssuerCountry,
         category = Category,
         bank_name = BankName,
@@ -536,7 +536,6 @@ process_tokenized_card_data_result(
         bin = get_tokenized_bin(PaymentData),
         last_digits = get_tokenized_pan(Last4, PaymentData),
         payment_token = #domain_BankCardTokenServiceRef{id = TokenServiceID},
-        token_provider_deprecated = TokenProvider,
         is_cvv_empty = set_is_empty_cvv(TokenizationMethod, BankCard),
         exp_date = encode_exp_date(genlib_map:get(exp_date, ExtraCardData)),
         cardholder_name = genlib_map:get(cardholder, ExtraCardData),
@@ -706,7 +705,7 @@ encode_tokenized_session_data(#paytoolprv_UnwrappedPaymentTool{
 
 process_crypto_wallet_data(Data) ->
     #{<<"cryptoCurrency">> := CryptoCurrency} = Data,
-    {crypto_currency_deprecated, capi_handler_decoder:convert_crypto_currency_from_swag(CryptoCurrency)}.
+    {crypto_currency, capi_handler_encoder:encode_crypto_currency(CryptoCurrency)}.
 
 %%
 
@@ -739,7 +738,7 @@ encode_request_params(#{<<"cc">> := Cc, <<"ctn">> := Ctn}) ->
 encode_mobile_commerce(MobilePhone, Operator) ->
     #{<<"cc">> := Cc, <<"ctn">> := Ctn} = MobilePhone,
     #domain_MobileCommerce{
-        operator_deprecated = Operator,
+        operator = encode_mobile_commerce_operator(Operator),
         phone = #domain_MobilePhone{cc = Cc, ctn = Ctn}
     }.
 
@@ -748,6 +747,14 @@ encode_mobile_commerce(MobilePhone, Operator) ->
 encode_resource_metadata(Metadata) ->
     Namespace = genlib_app:env(?APP, payment_resource_metadata_namespace, ?DEFAULT_RESOURCE_METADATA_NAMESPACE),
     #{genlib:to_binary(Namespace) => capi_json_marshalling:marshal(Metadata)}.
+
+encode_mobile_commerce_operator(Operator) ->
+    OperatorID = maps:get(Operator, genlib_app:env(?APP, mobile_commerce_mapping, #{})),
+    #domain_MobileOperatorRef{id = OperatorID}.
+
+-spec get_mobile_operators() -> [mobile_operator()].
+get_mobile_operators() ->
+    [mts, beeline, megafone, tele2, yota].
 
 %%
 

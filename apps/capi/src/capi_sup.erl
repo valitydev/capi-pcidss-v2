@@ -24,6 +24,7 @@ start_link() ->
 -spec init([]) -> {ok, {supervisor:sup_flags(), [supervisor:child_spec()]}}.
 init([]) ->
     validate_token_services(),
+    validate_mobile_operator_mapping(),
     LechiffreOpts = genlib_app:env(capi_pcidss, lechiffre_opts),
     LechiffreSpec = lechiffre:child_spec(lechiffre, LechiffreOpts),
     {LogicHandler, LogicHandlerSpecs} = get_logic_handler_info(),
@@ -65,4 +66,18 @@ validate_token_services() ->
             end
         end,
         capi_handler_tokens:get_token_providers()
+    ).
+
+validate_mobile_operator_mapping() ->
+    Operators = genlib_app:env(capi_pcidss, mobile_commerce_mapping),
+    lists:foreach(
+        fun(Operator) ->
+            case maps:find(Operator, Operators) of
+                error ->
+                    exit({invalid, mobile_commerce_mapping, {missed_operator, Operator}});
+                {ok, _} ->
+                    ok
+            end
+        end,
+        capi_handler_tokens:get_mobile_operators()
     ).

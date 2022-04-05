@@ -7,9 +7,6 @@
 -export([decode_last_digits/1]).
 -export([decode_masked_pan/2]).
 
--export([convert_crypto_currency_to_swag/1]).
--export([convert_crypto_currency_from_swag/1]).
-
 -export_type([decode_data/0]).
 
 -type encrypted_token() :: capi_crypto:token().
@@ -21,11 +18,8 @@ decode_payment_tool_details({payment_terminal, V}) ->
     decode_payment_terminal_details(V, #{<<"detailsType">> => <<"PaymentToolDetailsPaymentTerminal">>});
 decode_payment_tool_details({digital_wallet, V}) ->
     decode_digital_wallet_details(V, #{<<"detailsType">> => <<"PaymentToolDetailsDigitalWallet">>});
-decode_payment_tool_details({crypto_currency_deprecated, CryptoCurrency}) ->
-    #{
-        <<"detailsType">> => <<"PaymentToolDetailsCryptoWallet">>,
-        <<"cryptoCurrency">> => convert_crypto_currency_to_swag(CryptoCurrency)
-    };
+decode_payment_tool_details({crypto_currency, V}) ->
+    decode_crypto_currency_details(V, #{<<"detailsType">> => <<"PaymentToolDetailsCryptoWallet">>});
 decode_payment_tool_details({mobile_commerce, MobileCommerce}) ->
     #domain_MobileCommerce{
         phone = Phone
@@ -43,19 +37,14 @@ decode_bank_card_details(BankCard, V) ->
         <<"last4">> => LastDigits,
         <<"first6">> => Bin,
         <<"cardNumberMask">> => decode_masked_pan(Bin, LastDigits),
-        <<"paymentSystem">> => genlib:to_binary(BankCard#domain_BankCard.payment_system_deprecated),
-        <<"tokenProvider">> => decode_token_provider(BankCard#domain_BankCard.token_provider_deprecated)
+        <<"paymentSystem">> => decode_payment_system_ref(BankCard#domain_BankCard.payment_system),
+        <<"tokenProvider">> => decode_bank_card_service_token_ref(BankCard#domain_BankCard.payment_token)
     }).
 
 get_bank_card_bin(<<>>) ->
     undefined;
 get_bank_card_bin(Bin) ->
     Bin.
-
-decode_token_provider(Provider) when Provider /= undefined ->
-    genlib:to_binary(Provider);
-decode_token_provider(undefined) ->
-    undefined.
 
 decode_payment_terminal_details(#domain_PaymentTerminal{payment_service = PaymentService}, V) ->
     V#{
@@ -67,8 +56,21 @@ decode_digital_wallet_details(#domain_DigitalWallet{payment_service = PaymentSer
         <<"provider">> => decode_payment_service_ref(PaymentService)
     }.
 
+decode_crypto_currency_details(#domain_CryptoCurrencyRef{id = ID}, V) ->
+    V#{
+        <<"cryptoCurrency">> => ID
+    }.
+
 decode_payment_service_ref(#domain_PaymentServiceRef{id = Provider}) ->
     Provider.
+
+decode_payment_system_ref(#domain_PaymentSystemRef{id = ID}) ->
+    ID.
+
+decode_bank_card_service_token_ref(undefined) ->
+    undefined;
+decode_bank_card_service_token_ref(#domain_BankCardTokenServiceRef{id = ID}) ->
+    ID.
 
 mask_phone_number(PhoneNumber) ->
     genlib_string:redact(PhoneNumber, <<"^\\+\\d(\\d{1,10}?)\\d{2,4}$">>).
@@ -121,18 +123,6 @@ decode_last_digits(MaskedPan) when byte_size(MaskedPan) > ?MASKED_PAN_MAX_LENGTH
     binary:part(MaskedPan, {byte_size(MaskedPan), -?MASKED_PAN_MAX_LENGTH});
 decode_last_digits(MaskedPan) ->
     MaskedPan.
-
--spec convert_crypto_currency_from_swag(binary()) -> atom().
-convert_crypto_currency_from_swag(<<"bitcoinCash">>) ->
-    bitcoin_cash;
-convert_crypto_currency_from_swag(CryptoCurrency) when is_binary(CryptoCurrency) ->
-    binary_to_existing_atom(CryptoCurrency, utf8).
-
--spec convert_crypto_currency_to_swag(atom()) -> binary().
-convert_crypto_currency_to_swag(bitcoin_cash) ->
-    <<"bitcoinCash">>;
-convert_crypto_currency_to_swag(CryptoCurrency) when is_atom(CryptoCurrency) ->
-    atom_to_binary(CryptoCurrency, utf8).
 
 decode_mobile_phone(#domain_MobilePhone{cc = Cc, ctn = Ctn}) ->
     #{<<"cc">> => Cc, <<"ctn">> => Ctn}.

@@ -4,6 +4,7 @@
 
 -export([encode_client_info/1]).
 -export([encode_content/2]).
+-export([encode_crypto_currency/1]).
 
 -export_type([encode_data/0]).
 
@@ -24,3 +25,7 @@ encode_content(json, Data) ->
         type = <<"application/json">>,
         data = jsx:encode(Data)
     }.
+
+-spec encode_crypto_currency(binary()) -> encode_data().
+encode_crypto_currency(CryptoCurrency) ->
+    #domain_CryptoCurrencyRef{id = CryptoCurrency}.

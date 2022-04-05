@@ -158,6 +158,13 @@ start_capi(Config, ExtraEnv) ->
                         user_email => ?TK_META_USER_EMAIL
                     }
                 }},
+                {mobile_commerce_mapping, #{
+                    mts => <<"MTS">>,
+                    beeline => <<"BEELINE">>,
+                    megafone => <<"MEGAFON">>,
+                    tele2 => <<"TELE2">>,
+                    yota => <<"YOTA">>
+                }},
                 {bank_card_token_service_mapping, #{
                     googlepay => <<"GOOGLE PAY">>,
                     applepay => <<"APPLE PAY">>,
