@@ -191,40 +191,47 @@ make_payment_token_deadline(PaymentToolDeadline) ->
 
 %%
 
-process_card_data(Data, IdempotentParams, #{woody_context := WoodyCtx} = Context) ->
+process_card_data(Data, IdempotentParams, Context) ->
+    CardData = encode_card_data(Data),
     SessionData = encode_session_data(Data),
-    {CardData, ExtraCardData} = encode_card_data(Data),
-    BankInfo = get_bank_info(CardData#'cds_PutCardData'.pan, Context),
-    PaymentSystem = capi_bankcard:payment_system(BankInfo),
-    ValidationEnv = capi_bankcard:validation_env(),
-    BankCardData = capi_bankcard:merge_data(CardData, ExtraCardData, SessionData),
-    case bankcard_validator:validate(BankCardData, PaymentSystem, ValidationEnv, WoodyCtx) of
+    BankInfo = get_bank_info(maps:get(pan, CardData), Context),
+    case capi_bankcard:validate(CardData, SessionData, BankInfo, Context) of
         ok ->
-            Result = put_card_data_to_cds(CardData, SessionData, IdempotentParams, BankInfo, Context),
-            process_card_data_result(Result, CardData, ExtraCardData);
+            {Token, SessionID} = put_card_data_to_cds(CardData, SessionData, IdempotentParams, Context),
+            BankCard = construct_bank_card(Token, CardData, SessionData),
+            {{bank_card, enrich_bank_card(BankCard, BankInfo)}, SessionID};
         {error, Error} ->
             throw({ok, validation_error(Error)})
     end.
 
-process_card_data_result(
-    {{bank_card, BankCard}, SessionID},
-    #cds_PutCardData{
-        pan = CardNumber
-    },
-    ExtraCardData
-) ->
-    {
-        {bank_card, BankCard#domain_BankCard{
-            bin = get_first6(CardNumber),
-            last_digits = get_last4(CardNumber),
-            exp_date = encode_exp_date(genlib_map:get(exp_date, ExtraCardData)),
-            cardholder_name = genlib_map:get(cardholder, ExtraCardData)
-        }},
-        SessionID
+construct_bank_card(Token, CardData, SessionData) ->
+    CardNumber = maps:get(pan, CardData),
+    #domain_BankCard{
+        token = Token,
+        bin = get_first6(CardNumber),
+        last_digits = get_last4(CardNumber),
+        exp_date = encode_exp_date(maps:get(exp_date, CardData)),
+        cardholder_name = maps:get(cardholder, CardData, undefined),
+        is_cvv_empty = undef_cvv(SessionData)
     }.
 
-encode_exp_date(undefined) ->
-    undefined;
+enrich_bank_card(
+    BankCard,
+    #{
+        payment_system := PaymentSystem,
+        bank_name := BankName,
+        issuer_country := IssuerCountry,
+        category := Category,
+        metadata := {NS, Metadata}
+    }
+) ->
+    add_metadata(NS, Metadata, BankCard#domain_BankCard{
+        payment_system = #domain_PaymentSystemRef{id = PaymentSystem},
+        issuer_country = IssuerCountry,
+        category = Category,
+        bank_name = BankName
+    }).
+
 encode_exp_date({Month, Year}) ->
     #domain_BankCardExpDate{
         year = Year,
@@ -241,21 +248,12 @@ encode_session_data(CardData) ->
     }.
 
 encode_card_data(CardData) ->
-    CardNumber = genlib:to_binary(genlib_map:get(<<"cardNumber">>, CardData)),
-    ExpDate = parse_exp_date(genlib_map:get(<<"expDate">>, CardData)),
-    Cardholder = genlib_map:get(<<"cardHolder">>, CardData),
-    {
-        #cds_PutCardData{
-            pan = CardNumber
-        },
-        genlib_map:compact(#{
-            cardholder => Cardholder,
-            exp_date => ExpDate
-        })
-    }.
+    genlib_map:compact(#{
+        pan => maps:get(<<"cardNumber">>, CardData),
+        cardholder => maps:get(<<"cardHolder">>, CardData, undefined),
+        exp_date => parse_exp_date(maps:get(<<"expDate">>, CardData))
+    }).
 
-parse_exp_date(undefined) ->
-    undefined;
 parse_exp_date(ExpDate) when is_binary(ExpDate) ->
     [Month, Year0] = binary:split(ExpDate, <<"/">>),
     Year =
@@ -267,51 +265,28 @@ parse_exp_date(ExpDate) when is_binary(ExpDate) ->
         end,
     {genlib:to_int(Month), Year}.
 
-put_card_data_to_cds(CardData, SessionData, {ExternalID, IdempotentKey}, BankInfo, Context) ->
+put_card_data_to_cds(CardData, SessionData, {ExternalID, IdempotentKey}, Context) ->
     #{woody_context := WoodyCtx} = Context,
-    BankCard = put_card_to_cds(CardData, SessionData, BankInfo, Context),
-    {bank_card, #domain_BankCard{token = Token}} = BankCard,
+    Token = put_card_to_cds(CardData, Context),
     RandomID = gen_random_id(),
     Hash = erlang:phash2(Token),
     case capi_bender:gen_by_constant(IdempotentKey, RandomID, Hash, WoodyCtx) of
         {ok, SessionID} ->
             ok = put_session_to_cds(SessionID, SessionData, Context),
-            {BankCard, SessionID};
+            {Token, SessionID};
         {error, {external_id_conflict, _}} ->
             throw({ok, logic_error(externalIDConflict, ExternalID)})
     end.
 
-put_card_to_cds(CardData, SessionData, BankInfo, Context) ->
-    Call = {cds_storage, 'PutCard', {CardData}},
+put_card_to_cds(CardData, Context) ->
+    Arg = #cds_PutCardData{pan = maps:get(pan, CardData)},
+    Call = {cds_storage, 'PutCard', {Arg}},
     case capi_handler_utils:service_call(Call, Context) of
-        {ok, #cds_PutCardResult{bank_card = BankCard}} ->
-            {bank_card, expand_card_info(BankCard, BankInfo, undef_cvv(SessionData))};
+        {ok, #cds_PutCardResult{bank_card = #cds_BankCard{token = Token}}} ->
+            Token;
         {exception, #cds_InvalidCardData{}} ->
             throw({ok, logic_error(invalidRequest, <<"Card data is invalid">>)})
     end.
-
-expand_card_info(
-    BankCard,
-    #{
-        payment_system := PaymentSystem,
-        bank_name := BankName,
-        issuer_country := IssuerCountry,
-        category := Category,
-        metadata := {NS, Metadata}
-    },
-    HaveCVV
-) ->
-    BankCard1 = #domain_BankCard{
-        token = BankCard#cds_BankCard.token,
-        bin = BankCard#cds_BankCard.bin,
-        last_digits = BankCard#cds_BankCard.last_digits,
-        payment_system = #domain_PaymentSystemRef{id = PaymentSystem},
-        issuer_country = IssuerCountry,
-        category = Category,
-        bank_name = BankName,
-        is_cvv_empty = HaveCVV
-    },
-    add_metadata(NS, Metadata, BankCard1).
 
 %% Seems to fit within PCIDSS requirments for all PAN lengths
 get_first6(CardNumber) ->
@@ -430,27 +405,27 @@ store_token_in_tds(TokenContent, IdempotentParams, Context) ->
     {ok, ok} = capi_handler_utils:service_call(Call, Context),
     TokenID.
 
-process_tokenized_card_data(Data, IdempotentParams, #{woody_context := WoodyCtx} = Context) ->
-    Call = {get_token_provider_service_name(Data), 'Unwrap', {encode_wrapped_payment_tool(Data)}},
-    UnwrappedPaymentTool =
-        case capi_handler_utils:service_call(Call, Context) of
-            {ok, Tool} ->
-                Tool;
-            {exception, #'InvalidRequest'{}} ->
-                throw({ok, logic_error(invalidRequest, <<"Tokenized card data is invalid">>)})
-        end,
-    {CardData, ExtraCardData} = encode_tokenized_card_data(UnwrappedPaymentTool),
+process_tokenized_card_data(Data, IdempotentParams, Context) ->
+    UnwrappedPaymentTool = unwrap_card_data_token(Data, Context),
+    CardData = encode_tokenized_card_data(UnwrappedPaymentTool),
     SessionData = encode_tokenized_session_data(UnwrappedPaymentTool),
-    BankInfo = get_bank_info(CardData#cds_PutCardData.pan, Context),
-    PaymentSystem = capi_bankcard:payment_system(BankInfo),
-    ValidationEnv = capi_bankcard:validation_env(),
-    BankCardData = capi_bankcard:merge_data(CardData, ExtraCardData, SessionData),
-    case bankcard_validator:validate(BankCardData, PaymentSystem, ValidationEnv, WoodyCtx) of
+    BankInfo = get_bank_info(maps:get(pan, CardData), Context),
+    case capi_bankcard:validate(CardData, SessionData, BankInfo, Context) of
         ok ->
-            Result = put_card_data_to_cds(CardData, SessionData, IdempotentParams, BankInfo, Context),
-            process_tokenized_card_data_result(Result, ExtraCardData, UnwrappedPaymentTool);
+            {Token, SessionID} = put_card_data_to_cds(CardData, SessionData, IdempotentParams, Context),
+            {BankCard, Deadline} = construct_tokenized_bank_card(Token, CardData, SessionData, UnwrappedPaymentTool),
+            {{bank_card, enrich_bank_card(BankCard, BankInfo)}, SessionID, Deadline};
         {error, Error} ->
             throw({ok, validation_error(Error)})
+    end.
+
+unwrap_card_data_token(Data, Context) ->
+    Call = {get_token_provider_service_name(Data), 'Unwrap', {encode_wrapped_payment_tool(Data)}},
+    case capi_handler_utils:service_call(Call, Context) of
+        {ok, Tool} ->
+            Tool;
+        {exception, #'InvalidRequest'{}} ->
+            throw({ok, logic_error(invalidRequest, <<"Tokenized card data is invalid">>)})
     end.
 
 get_token_provider_service_name(Data) ->
@@ -516,9 +491,10 @@ encode_payment_request(#{<<"provider">> := <<"YandexPay">>} = Data) ->
         payment_token = capi_handler_encoder:encode_content(json, maps:get(<<"paymentToken">>, Data))
     }}.
 
-process_tokenized_card_data_result(
-    {{bank_card, BankCard}, SessionID},
-    ExtraCardData,
+construct_tokenized_bank_card(
+    Token,
+    CardData,
+    SessionData,
     #paytoolprv_UnwrappedPaymentTool{
         card_info = #paytoolprv_CardInfo{
             last_4_digits = Last4
@@ -532,18 +508,19 @@ process_tokenized_card_data_result(
     TokenServiceID = get_token_service_id(TokenProvider),
     TokenizationMethod = get_tokenization_method(PaymentData),
     {NS, ProviderMetadata} = extract_payment_tool_provider_metadata(PaymentDetails),
-    BankCard1 = BankCard#domain_BankCard{
+    BankCard1 = #domain_BankCard{
+        token = Token,
         bin = get_tokenized_bin(PaymentData),
         last_digits = get_tokenized_pan(Last4, PaymentData),
         payment_token = #domain_BankCardTokenServiceRef{id = TokenServiceID},
-        is_cvv_empty = set_is_empty_cvv(TokenizationMethod, BankCard),
-        exp_date = encode_exp_date(genlib_map:get(exp_date, ExtraCardData)),
-        cardholder_name = genlib_map:get(cardholder, ExtraCardData),
+        is_cvv_empty = set_is_empty_cvv(TokenizationMethod, undef_cvv(SessionData)),
+        exp_date = encode_exp_date(maps:get(exp_date, CardData)),
+        cardholder_name = maps:get(cardholder, CardData, undefined),
         tokenization_method = TokenizationMethod
     },
     BankCard2 = add_metadata(NS, ProviderMetadata, BankCard1),
     Deadline = capi_utils:deadline_from_binary(ValidUntil),
-    {{bank_card, BankCard2}, SessionID, Deadline}.
+    {BankCard2, Deadline}.
 
 get_tokenized_bin({card, #paytoolprv_Card{pan = PAN}}) ->
     get_first6(PAN);
@@ -566,8 +543,8 @@ get_tokenization_method({tokenized_card, _}) ->
 % simple bank card. This prevent wrong routing decisions in hellgate
 % when cvv is empty, but is_cvv_empty = undefined, which forces routing to bypass
 % restrictions and crash adapter.
-set_is_empty_cvv(none, BankCard) ->
-    BankCard#domain_BankCard.is_cvv_empty;
+set_is_empty_cvv(none, IsEmpty) ->
+    IsEmpty;
 set_is_empty_cvv(_, _) ->
     undefined.
 
@@ -640,15 +617,11 @@ encode_tokenized_card_data(#paytoolprv_UnwrappedPaymentTool{
     }
 }) ->
     ExpDate = {Month, Year},
-    {
-        #cds_PutCardData{
-            pan = DPAN
-        },
-        genlib_map:compact(#{
-            cardholder => CardholderName,
-            exp_date => ExpDate
-        })
-    };
+    genlib_map:compact(#{
+        pan => DPAN,
+        cardholder => CardholderName,
+        exp_date => ExpDate
+    });
 encode_tokenized_card_data(#paytoolprv_UnwrappedPaymentTool{
     payment_data =
         {card, #paytoolprv_Card{
@@ -663,15 +636,11 @@ encode_tokenized_card_data(#paytoolprv_UnwrappedPaymentTool{
     }
 }) ->
     ExpDate = {Month, Year},
-    {
-        #cds_PutCardData{
-            pan = PAN
-        },
-        genlib_map:compact(#{
-            cardholder => CardholderName,
-            exp_date => ExpDate
-        })
-    }.
+    genlib_map:compact(#{
+        pan => PAN,
+        cardholder => CardholderName,
+        exp_date => ExpDate
+    }).
 
 encode_tokenized_session_data(#paytoolprv_UnwrappedPaymentTool{
     payment_data =
