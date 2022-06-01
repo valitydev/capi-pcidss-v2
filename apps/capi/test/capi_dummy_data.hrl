@@ -3,9 +3,7 @@
 -define(TIMESTAMP, <<"2016-03-22T06:12:27Z">>).
 -define(DPAN, <<"4111111111111234">>).
 -define(BANK_CARD, #cds_BankCard{
-    token = ?STRING,
-    bin = <<"532130">>,
-    last_digits = <<"7892">>
+    token = ?STRING
 }).
 -define(TEST_USER_REALM, <<"external">>).
 -define(TEST_RULESET_ID, <<"test/api">>).
