@@ -1,6 +1,6 @@
 {"1.2.0",
 [{<<"bankcard_validator">>,
-  {git,"https://github.com/valitydev/bankcard_validator.git",
+  {git,"https://github.com/valitydev/bankcard-validator.git",
        {ref,"5d26beb1a98582b992edded09706f2ca3f2f5cdc"}},
   0},
  {<<"bender_proto">>,

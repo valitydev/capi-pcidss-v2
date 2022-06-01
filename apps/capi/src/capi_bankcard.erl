@@ -21,9 +21,7 @@
 -define(META_NS, <<"com.rbkmoney.binbase">>).
 
 -export([lookup_bank_info/2]).
--export([merge_data/3]).
--export([payment_system/1]).
--export([validation_env/0]).
+-export([validate/4]).
 
 -type bank_info() :: #{
     payment_system := payment_system(),
@@ -39,28 +37,19 @@
         payment_system
         | issuer_country}.
 
--type card_data() :: cds_proto_storage_thrift:'PutCardData'().
--type extra_card_data() :: #{
-    cardholder => binary() | undefined,
-    exp_data => {integer(), integer()}
+-type card_data() :: #{
+    pan := binary(),
+    exp_date := {integer(), integer()},
+    cardholder => binary()
 }.
 
 -type session_data() :: cds_proto_storage_thrift:'SessionData'().
 -type payment_system() :: bankcard_validator:payment_system().
 -type reason() :: bankcard_validator:reason().
 
--type validation_env() :: bankcard_validator:validation_env().
-
 -export_type([session_data/0]).
 -export_type([payment_system/0]).
 -export_type([reason/0]).
--export_type([validation_env/0]).
-
--spec validation_env() -> validation_env().
-validation_env() ->
-    DefaultEnv = #{now => calendar:universal_time()},
-    Env = genlib_app:env(capi_pcidss, validation, #{}),
-    maps:merge(DefaultEnv, Env).
 
 -spec lookup_bank_info(_PAN :: binary(), capi_handler:processing_context()) ->
     {ok, bank_info()} | {error, lookup_error()}.
@@ -105,33 +94,47 @@ decode_issuer_country(CountryCode) when is_binary(CountryCode) ->
 decode_issuer_country(undefined) ->
     undefined.
 
+%%
+
+-type context() :: capi_handler:processing_context().
+-type validation_env() :: bankcard_validator:validation_env().
+
+-spec validate(card_data(), session_data() | undefined, bank_info(), context()) ->
+    ok | {error, bankcard_validator:reason()}.
+validate(CardData, SessionData, BankInfo, #{woody_context := WoodyCtx}) ->
+    BankCard = prepare_bankcard(CardData, SessionData),
+    PaymentSystem = payment_system(BankInfo),
+    bankcard_validator:validate(BankCard, PaymentSystem, validation_env(), WoodyCtx).
+
+-spec validation_env() -> validation_env().
+validation_env() ->
+    DefaultEnv = #{now => calendar:universal_time()},
+    Env = genlib_app:env(capi_pcidss, validation, #{}),
+    maps:merge(DefaultEnv, Env).
+
+-spec prepare_bankcard(card_data(), session_data() | undefined) -> bankcard_validator:bankcard_data().
+prepare_bankcard(CardData, undefined) ->
+    prepare_bankcard(CardData);
+prepare_bankcard(CardData, SessionData) ->
+    BankCard = prepare_bankcard(CardData),
+    BankCard#{cvc => get_cvc_from_session_data(SessionData)}.
+
+-spec prepare_bankcard(card_data()) -> bankcard_validator:bankcard_data().
+prepare_bankcard(CardData) ->
+    #{
+        card_number => maps:get(pan, CardData),
+        exp_date => maps:get(exp_date, CardData),
+        cardholder => maps:get(cardholder, CardData, undefined)
+    }.
+
 -spec payment_system(bank_info()) -> payment_system().
 payment_system(BankInfo) ->
     maps:get(payment_system, BankInfo).
 
--spec merge_data(card_data(), extra_card_data(), session_data() | undefined) -> bankcard_validator:bankcard_data().
-merge_data(CardData, ExtraCardData, undefined) ->
-    maps:merge(convert_card_data(CardData), ExtraCardData);
-merge_data(CardData, ExtraCardData, #cds_SessionData{auth_data = AuthData}) ->
-    CVC = get_cvc_from_session_data(AuthData),
-    CardDataMap0 = convert_card_data(CardData),
-    CardDataMap1 = maps:merge(CardDataMap0, ExtraCardData),
-    CardDataMap1#{cvc => maybe_undefined(CVC)}.
-
-get_cvc_from_session_data({card_security_code, AuthData}) ->
-    AuthData#cds_CardSecurityCode.value;
+get_cvc_from_session_data(#cds_SessionData{auth_data = {card_security_code, AuthData}}) ->
+    maybe_undefined(AuthData#cds_CardSecurityCode.value);
 get_cvc_from_session_data(_) ->
     undefined.
-
-%%
-
-convert_card_data(CardData) ->
-    #cds_PutCardData{
-        pan = PAN
-    } = CardData,
-    #{
-        card_number => PAN
-    }.
 
 maybe_undefined(<<>>) ->
     undefined;
