@@ -22,7 +22,7 @@
  {<<"cache">>,{pkg,<<"cache">>,<<"2.3.3">>},1},
  {<<"cds_proto">>,
   {git,"https://github.com/valitydev/cds-proto.git",
-       {ref,"07f2b0f2e61d94b5fd93c40106525a9777d3398e"}},
+       {ref,"ed9f9078049ebcd1439d2ada0479fc8f33ccacf1"}},
   0},
  {<<"certifi">>,{pkg,<<"certifi">>,<<"2.6.1">>},1},
  {<<"cg_mon">>,
