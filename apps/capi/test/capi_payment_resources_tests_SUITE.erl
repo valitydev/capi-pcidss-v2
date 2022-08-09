@@ -27,6 +27,8 @@
     create_visa_payment_resource_ok_test/1,
     % FIXME Made obsolete by client validation
     % create_payment_resource_with_client_url_fail_test/1,
+    create_payment_resource_invalid_card_test/1,
+    create_payment_resource_unsupported_card_test/1,
     create_payment_resource_invalid_cardholder_test/1,
     create_visa_with_empty_cvc_ok_test/1,
     create_visa_with_wrong_cvc_test/1,
@@ -98,6 +100,8 @@ groups() ->
             create_visa_payment_resource_ok_test,
             % FIXME Made obsolete by client validation
             %create_payment_resource_with_client_url_fail_test,
+            create_payment_resource_invalid_card_test,
+            create_payment_resource_unsupported_card_test,
             create_payment_resource_invalid_cardholder_test,
             create_visa_with_empty_cvc_ok_test,
             create_visa_with_wrong_cvc_test,
@@ -277,7 +281,6 @@ expiration_date_fail_test(Config) ->
         ],
         Config
     ),
-    ClientInfo = #{<<"fingerprint">> => <<"test fingerprint">>},
     CardHolder = <<"Alexander Weinerschnitzel">>,
     {error,
         {400, #{
@@ -291,8 +294,68 @@ expiration_date_fail_test(Config) ->
             <<"expDate">> => <<"02/20">>,
             <<"cvv">> => <<"232">>
         },
-        <<"clientInfo">> => ClientInfo
+        <<"clientInfo">> => ?SWAG_CLIENT_INFO
     }).
+
+-spec create_payment_resource_unsupported_card_test(_) -> _.
+create_payment_resource_unsupported_card_test(Config) ->
+    _ = capi_ct_helper:mock_services(
+        [
+            {binbase, fun('Lookup', _) -> {throwing, #binbase_BinNotFound{}} end}
+        ],
+        Config
+    ),
+    ?assertEqual(
+        {error,
+            {400, #{
+                <<"code">> => <<"invalidRequest">>,
+                <<"message">> => <<"Unsupported card">>
+            }}},
+        capi_client_tokens:create_payment_resource(
+            ?config(context, Config),
+            #{
+                <<"paymentTool">> => ?SWAG_BANK_CARD(?PAN),
+                <<"clientInfo">> => ?SWAG_CLIENT_INFO
+            }
+        )
+    ).
+
+-spec create_payment_resource_invalid_card_test(_) -> _.
+create_payment_resource_invalid_card_test(Config) ->
+    _ = capi_ct_helper:mock_services(
+        [
+            {binbase, fun('Lookup', _) -> {ok, ?BINBASE_LOOKUP_RESULT(<<"VISA">>)} end}
+        ],
+        Config
+    ),
+    ?assertEqual(
+        {error,
+            {400, #{
+                <<"code">> => <<"invalidRequest">>,
+                <<"message">> => <<"Invalid cardNumber checksum">>
+            }}},
+        capi_client_tokens:create_payment_resource(
+            ?config(context, Config),
+            #{
+                <<"paymentTool">> => ?SWAG_BANK_CARD(<<"4111111111111112">>),
+                <<"clientInfo">> => ?SWAG_CLIENT_INFO
+            }
+        )
+    ),
+    ?assertEqual(
+        {error,
+            {400, #{
+                <<"code">> => <<"invalidRequest">>,
+                <<"message">> => <<"Invalid cardNumber length">>
+            }}},
+        capi_client_tokens:create_payment_resource(
+            ?config(context, Config),
+            #{
+                <<"paymentTool">> => ?SWAG_BANK_CARD(<<"41111111111114">>),
+                <<"clientInfo">> => ?SWAG_CLIENT_INFO
+            }
+        )
+    ).
 
 -spec create_payment_resource_invalid_cardholder_test(_) -> _.
 create_payment_resource_invalid_cardholder_test(Config) ->
@@ -314,32 +377,26 @@ create_payment_resource_invalid_cardholder_test(Config) ->
         ],
         Config
     ),
-    ClientInfo = #{<<"fingerprint">> => <<"test fingerprint">>},
-    PaymentTool = #{
-        <<"paymentToolType">> => <<"CardData">>,
-        <<"cardNumber">> => <<"4111111111111111">>,
-        <<"expDate">> => <<"08/27">>,
-        <<"cvv">> => <<"232">>
-    },
+    PaymentTool = ?SWAG_BANK_CARD(<<"4111111111111111">>),
     {ok, _} = capi_client_tokens:create_payment_resource(
         ?config(context, Config),
         #{
             <<"paymentTool">> => PaymentTool#{<<"cardHolder">> => <<"Вася Иванов"/utf8>>},
-            <<"clientInfo">> => ClientInfo
+            <<"clientInfo">> => ?SWAG_CLIENT_INFO
         }
     ),
     {error, {request_validation_failed, _}} = capi_client_tokens:create_payment_resource(
         ?config(context, Config),
         #{
             <<"paymentTool">> => PaymentTool#{<<"cardHolder">> => <<"4111111111111111">>},
-            <<"clientInfo">> => ClientInfo
+            <<"clientInfo">> => ?SWAG_CLIENT_INFO
         }
     ),
     {error, {request_validation_failed, _}} = capi_client_tokens:create_payment_resource(
         ?config(context, Config),
         #{
             <<"paymentTool">> => PaymentTool#{<<"cardHolder">> => <<"Вася123"/utf8>>},
-            <<"clientInfo">> => ClientInfo
+            <<"clientInfo">> => ?SWAG_CLIENT_INFO
         }
     ).
 
