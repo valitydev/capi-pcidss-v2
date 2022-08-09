@@ -85,8 +85,6 @@ get_service_modname(payment_tool_provider_yandex_pay) ->
     {dmsl_payment_tool_provider_thrift, 'PaymentToolProvider'};
 get_service_modname(binbase) ->
     {binbase_binbase_thrift, 'Binbase'};
-get_service_modname(bender) ->
-    {bender_thrift, 'Bender'};
 get_service_modname(moneypenny) ->
     {moneypenny_mnp_thrift, 'Mnp'}.
 

@@ -96,7 +96,6 @@ oops_body_test(Config) ->
                 ('PutSession', _) -> {ok, ok};
                 ('PutCard', _) -> {ok, <<"whoa">>}
             end},
-            {bender, fun('GenerateID', _) -> {ok, capi_ct_helper_bender:get_result(<<"bender key">>)} end},
             {binbase, fun('Lookup', _) -> {ok, <<"totally legit bank card">>} end}
         ],
         Config
