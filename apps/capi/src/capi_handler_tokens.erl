@@ -9,7 +9,7 @@
 -include_lib("damsel/include/dmsl_payment_tool_provider_thrift.hrl").
 -include_lib("moneypenny/include/moneypenny_mnp_thrift.hrl").
 
--include_lib("bouncer_proto/include/bouncer_restriction_thrift.hrl").
+-include_lib("bouncer_proto/include/bouncer_rstn_thrift.hrl").
 
 -behaviour(capi_handler).
 
@@ -133,9 +133,9 @@ process_request('CreatePaymentResource', Req, Context, Resolution) ->
 
 flatten_resolution_decision(allowed) ->
     allowed;
-flatten_resolution_decision({restricted, #brstn_Restrictions{capi = CAPI}}) ->
+flatten_resolution_decision({restricted, #rstn_Restrictions{capi = CAPI}}) ->
     case CAPI of
-        #brstn_RestrictionsCommonAPI{
+        #rstn_RestrictionsCommonAPI{
             ip_replacement_forbidden = true
         } ->
             {restricted, ip_replacement_forbidden};

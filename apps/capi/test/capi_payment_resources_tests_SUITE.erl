@@ -5,7 +5,7 @@
 
 -include_lib("damsel/include/dmsl_payment_processing_thrift.hrl").
 -include_lib("damsel/include/dmsl_payment_tool_provider_thrift.hrl").
--include_lib("bouncer_proto/include/bouncer_restriction_thrift.hrl").
+-include_lib("bouncer_proto/include/bouncer_rstn_thrift.hrl").
 -include_lib("binbase_proto/include/binbase_binbase_thrift.hrl").
 -include_lib("cds_proto/include/cds_proto_storage_thrift.hrl").
 -include_lib("capi_dummy_data.hrl").
@@ -176,7 +176,7 @@ init_per_testcase(authorization_error_wrong_token_type_test, C) ->
 init_per_testcase(ip_replacement_restricted_test, C) ->
     SupPid = capi_ct_helper:start_mocked_service_sup(?MODULE),
     _ = capi_ct_helper_token_keeper:mock_invoice_access_token(SupPid),
-    Restriction = #brstn_Restrictions{capi = #brstn_RestrictionsCommonAPI{ip_replacement_forbidden = true}},
+    Restriction = #rstn_Restrictions{capi = #rstn_RestrictionsCommonAPI{ip_replacement_forbidden = true}},
     _ = capi_ct_helper_bouncer:mock_arbiter(capi_ct_helper_bouncer:judge_always_restricted(Restriction), SupPid),
     [{test_sup, SupPid} | C];
 init_per_testcase(_Name, C) ->
