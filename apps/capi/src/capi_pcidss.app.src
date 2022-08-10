@@ -7,7 +7,6 @@
         kernel,
         stdlib,
         genlib,
-        bender_proto,
         binbase_proto,
         tds_proto,
         damsel,

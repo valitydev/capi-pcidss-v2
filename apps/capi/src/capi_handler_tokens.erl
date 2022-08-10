@@ -9,7 +9,7 @@
 -include_lib("damsel/include/dmsl_payment_tool_provider_thrift.hrl").
 -include_lib("moneypenny/include/moneypenny_mnp_thrift.hrl").
 
--include_lib("bouncer_proto/include/bouncer_restriction_thrift.hrl").
+-include_lib("bouncer_proto/include/bouncer_rstn_thrift.hrl").
 
 -behaviour(capi_handler).
 
@@ -75,7 +75,7 @@ prepare_replacement_ip(_) ->
     Context :: capi_handler:processing_context(),
     Resolution :: capi_auth:resolution()
 ) -> {ok | error, capi_handler:response() | noimpl}.
-process_request('CreatePaymentResource' = OperationID, Req, Context, Resolution) ->
+process_request('CreatePaymentResource', Req, Context, Resolution) ->
     Params = maps:get('PaymentResourceParams', Req),
     ClientInfo0 = maps:get(<<"clientInfo">>, Params),
     ClientIP =
@@ -94,20 +94,16 @@ process_request('CreatePaymentResource' = OperationID, Req, Context, Resolution)
         ClientUrl = get_client_url(ClientInfo1),
         ClientInfo = maps:put(<<"url">>, ClientUrl, ClientInfo1),
         Data = maps:get(<<"paymentTool">>, Params),
-        PartyID = capi_handler_utils:get_party_id(Context),
-        ExternalID = maps:get(<<"externalID">>, Params, undefined),
-        IdempotentKey = capi_bender:get_idempotent_key(OperationID, PartyID, ExternalID),
-        IdempotentParams = {ExternalID, IdempotentKey},
         {PaymentTool, PaymentSessionID, PaymentToolDeadline} =
             case Data of
                 #{<<"paymentToolType">> := <<"CardData">>} ->
-                    erlang:append_element(process_card_data(Data, IdempotentParams, Context), undefined);
+                    erlang:append_element(process_card_data(Data, Context), undefined);
                 #{<<"paymentToolType">> := <<"PaymentTerminalData">>} ->
                     {process_payment_terminal_data(Data), <<>>, undefined};
                 #{<<"paymentToolType">> := <<"DigitalWalletData">>} ->
-                    {process_digital_wallet_data(Data, IdempotentParams, Context), <<>>, undefined};
+                    {process_digital_wallet_data(Data, Context), <<>>, undefined};
                 #{<<"paymentToolType">> := <<"TokenizedCardData">>} ->
-                    process_tokenized_card_data(Data, IdempotentParams, Context);
+                    process_tokenized_card_data(Data, Context);
                 #{<<"paymentToolType">> := <<"CryptoWalletData">>} ->
                     {process_crypto_wallet_data(Data), <<>>, undefined};
                 #{<<"paymentToolType">> := <<"MobileCommerceData">>} ->
@@ -137,9 +133,9 @@ process_request('CreatePaymentResource' = OperationID, Req, Context, Resolution)
 
 flatten_resolution_decision(allowed) ->
     allowed;
-flatten_resolution_decision({restricted, #brstn_Restrictions{capi = CAPI}}) ->
+flatten_resolution_decision({restricted, #rstn_Restrictions{capi = CAPI}}) ->
     case CAPI of
-        #brstn_RestrictionsCommonAPI{
+        #rstn_RestrictionsCommonAPI{
             ip_replacement_forbidden = true
         } ->
             {restricted, ip_replacement_forbidden};
@@ -191,13 +187,13 @@ make_payment_token_deadline(PaymentToolDeadline) ->
 
 %%
 
-process_card_data(Data, IdempotentParams, Context) ->
+process_card_data(Data, Context) ->
     CardData = encode_card_data(Data),
     SessionData = encode_session_data(Data),
     BankInfo = get_bank_info(maps:get(pan, CardData), Context),
     case capi_bankcard:validate(CardData, SessionData, BankInfo, Context) of
         ok ->
-            {Token, SessionID} = put_card_data_to_cds(CardData, SessionData, IdempotentParams, Context),
+            {Token, SessionID} = put_card_data_to_cds(CardData, SessionData, Context),
             BankCard = construct_bank_card(Token, CardData, SessionData),
             {{bank_card, enrich_bank_card(BankCard, BankInfo)}, SessionID};
         {error, Error} ->
@@ -265,18 +261,11 @@ parse_exp_date(ExpDate) when is_binary(ExpDate) ->
         end,
     {genlib:to_int(Month), Year}.
 
-put_card_data_to_cds(CardData, SessionData, {ExternalID, IdempotentKey}, Context) ->
-    #{woody_context := WoodyCtx} = Context,
+put_card_data_to_cds(CardData, SessionData, Context) ->
     Token = put_card_to_cds(CardData, Context),
-    RandomID = gen_random_id(),
-    Hash = erlang:phash2(Token),
-    case capi_bender:gen_by_constant(IdempotentKey, RandomID, Hash, WoodyCtx) of
-        {ok, SessionID} ->
-            ok = put_session_to_cds(SessionID, SessionData, Context),
-            {Token, SessionID};
-        {error, {external_id_conflict, _}} ->
-            throw({ok, logic_error(externalIDConflict, ExternalID)})
-    end.
+    SessionID = gen_random_id(),
+    ok = put_session_to_cds(SessionID, SessionData, Context),
+    {Token, SessionID}.
 
 put_card_to_cds(CardData, Context) ->
     Arg = #cds_PutCardData{pan = maps:get(pan, CardData)},
@@ -379,7 +368,7 @@ process_payment_terminal_data(Data) ->
             throw({ok, logic_error(invalidRequest, <<"Terminal provider is invalid">>)})
     end.
 
-process_digital_wallet_data(Data, IdempotentParams, Context) ->
+process_digital_wallet_data(Data, Context) ->
     Ref = encode_payment_service_ref(maps:get(<<"provider">>, Data)),
     case validate_payment_service_ref(Ref) of
         {ok, _} ->
@@ -387,32 +376,27 @@ process_digital_wallet_data(Data, IdempotentParams, Context) ->
             DigitalWallet = #domain_DigitalWallet{
                 id = maps:get(<<"id">>, Data),
                 payment_service = encode_payment_service_ref(maps:get(<<"provider">>, Data)),
-                token = capi_utils:maybe(Token, fun(T) -> store_token_in_tds(T, IdempotentParams, Context) end)
+                token = capi_utils:maybe(Token, fun(T) -> store_token_in_tds(T, Context) end)
             },
             {digital_wallet, DigitalWallet};
         {error, object_not_found} ->
             throw({ok, logic_error(invalidRequest, <<"Digital wallet provider is invalid">>)})
     end.
 
-store_token_in_tds(TokenContent, IdempotentParams, Context) ->
-    #{woody_context := WoodyCtx} = Context,
-    {_ExternalID, IdempotentKey} = IdempotentParams,
+store_token_in_tds(TokenContent, Context) ->
     Token = #tds_Token{content = TokenContent},
-    RandomID = gen_random_id(),
-    Hash = undefined,
-    {ok, TokenID} = capi_bender:gen_by_constant(IdempotentKey, RandomID, Hash, WoodyCtx),
-    Call = {tds_storage, 'PutToken', {TokenID, Token}},
-    {ok, ok} = capi_handler_utils:service_call(Call, Context),
+    TokenID = gen_random_id(),
+    {ok, ok} = capi_handler_utils:service_call({tds_storage, 'PutToken', {TokenID, Token}}, Context),
     TokenID.
 
-process_tokenized_card_data(Data, IdempotentParams, Context) ->
+process_tokenized_card_data(Data, Context) ->
     UnwrappedPaymentTool = unwrap_card_data_token(Data, Context),
     CardData = encode_tokenized_card_data(UnwrappedPaymentTool),
     SessionData = encode_tokenized_session_data(UnwrappedPaymentTool),
     BankInfo = get_bank_info(maps:get(pan, CardData), Context),
     case capi_bankcard:validate(CardData, SessionData, BankInfo, Context) of
         ok ->
-            {Token, SessionID} = put_card_data_to_cds(CardData, SessionData, IdempotentParams, Context),
+            {Token, SessionID} = put_card_data_to_cds(CardData, SessionData, Context),
             {BankCard, Deadline} = construct_tokenized_bank_card(Token, CardData, SessionData, UnwrappedPaymentTool),
             {{bank_card, enrich_bank_card(BankCard, BankInfo)}, SessionID, Deadline};
         {error, Error} ->

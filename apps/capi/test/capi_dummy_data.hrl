@@ -1,12 +1,22 @@
 -define(STRING, <<"TEST">>).
 -define(INTEGER, 10000).
 -define(TIMESTAMP, <<"2016-03-22T06:12:27Z">>).
+-define(PAN, <<"4111111111111111">>).
 -define(DPAN, <<"4111111111111234">>).
 -define(BANK_CARD, #cds_BankCard{
     token = ?STRING
 }).
 -define(TEST_USER_REALM, <<"external">>).
 -define(TEST_RULESET_ID, <<"test/api">>).
+
+-define(SWAG_CLIENT_INFO, #{<<"fingerprint">> => <<"test fingerprint">>}).
+-define(SWAG_BANK_CARD(PAN), ?SWAG_BANK_CARD(PAN, <<"08/27">>, <<"232">>)).
+-define(SWAG_BANK_CARD(PAN, ExpDate, CVV), #{
+    <<"paymentToolType">> => <<"CardData">>,
+    <<"cardNumber">> => PAN,
+    <<"expDate">> => ExpDate,
+    <<"cvv">> => CVV
+}).
 
 -define(BANK_NAME, <<"SAVINGS BANK OF THE GLORIOUS RUSSIAN FEDERATION">>).
 

@@ -1,5 +1,7 @@
 -module(capi_bouncer_context).
--include_lib("bouncer_proto/include/bouncer_context_v1_thrift.hrl").
+
+-include_lib("bouncer_proto/include/bouncer_ctx_v1_thrift.hrl").
+-include_lib("bouncer_proto/include/bouncer_base_thrift.hrl").
 
 -type fragment() :: bouncer_client:context_fragment().
 -type acc() :: bouncer_context_helpers:context_fragment().
@@ -57,13 +59,13 @@ build(Prototypes, {Acc0, External}, WoodyCtx) ->
     {Acc1, External}.
 
 build(operation, Params = #{id := OperationID}, Acc, _WoodyCtx) ->
-    Acc#bctx_v1_ContextFragment{
-        capi = #bctx_v1_ContextCommonAPI{
-            op = #bctx_v1_CommonAPIOperation{
+    Acc#ctx_v1_ContextFragment{
+        capi = #ctx_v1_ContextCommonAPI{
+            op = #ctx_v1_CommonAPIOperation{
                 id = operation_id_to_binary(OperationID),
                 party = maybe_entity(party, Params),
                 client_info = maybe_with(client_info, Params, fun(ClientInfo) ->
-                    #bctx_v1_ClientInfo{
+                    #ctx_v1_ClientInfo{
                         ip = maybe_marshal_ip(maps:get(ip, ClientInfo, undefined))
                     }
                 end)
@@ -71,10 +73,10 @@ build(operation, Params = #{id := OperationID}, Acc, _WoodyCtx) ->
         }
     };
 build(payment_tool, Params, Acc, _WoodyCtx) ->
-    Acc#bctx_v1_ContextFragment{
-        payment_tool = #bctx_v1_ContextPaymentTool{
+    Acc#ctx_v1_ContextFragment{
+        payment_tool = #ctx_v1_ContextPaymentTool{
             %% #ED-124 для валидации провайдерского токена требуются party&shop
-            scope = #bctx_v1_AuthScope{
+            scope = #ctx_v1_AuthScope{
                 party = maybe_entity(party, Params),
                 shop = maybe_entity(shop, Params)
             },
@@ -93,9 +95,9 @@ maybe_entity(Name, Params) ->
     maybe_with(Name, Params, fun build_entity/1).
 
 build_entity(ID) when is_binary(ID) ->
-    #bouncer_base_Entity{id = ID};
+    #base_Entity{id = ID};
 build_entity(ID) when is_integer(ID) ->
-    #bouncer_base_Entity{id = integer_to_binary(ID)}.
+    #base_Entity{id = integer_to_binary(ID)}.
 
 %% NOTE: from bouncer_client/bouncer_context_helpers.erl
 maybe_marshal_ip(IP) when is_tuple(IP) ->

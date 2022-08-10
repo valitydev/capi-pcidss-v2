@@ -5,7 +5,7 @@
 
 -include_lib("damsel/include/dmsl_payment_processing_thrift.hrl").
 -include_lib("damsel/include/dmsl_payment_tool_provider_thrift.hrl").
--include_lib("bouncer_proto/include/bouncer_restriction_thrift.hrl").
+-include_lib("bouncer_proto/include/bouncer_rstn_thrift.hrl").
 -include_lib("binbase_proto/include/binbase_binbase_thrift.hrl").
 -include_lib("cds_proto/include/cds_proto_storage_thrift.hrl").
 -include_lib("capi_dummy_data.hrl").
@@ -27,19 +27,18 @@
     create_visa_payment_resource_ok_test/1,
     % FIXME Made obsolete by client validation
     % create_payment_resource_with_client_url_fail_test/1,
+    create_payment_resource_invalid_card_test/1,
+    create_payment_resource_unsupported_card_test/1,
     create_payment_resource_invalid_cardholder_test/1,
     create_visa_with_empty_cvc_ok_test/1,
     create_visa_with_wrong_cvc_test/1,
     create_visa_with_wrong_cardnumber_test/1,
-    create_visa_payment_resource_idemp_ok_test/1,
-    create_visa_payment_resource_idemp_fail_test/1,
     create_nspkmir_payment_resource_ok_test/1,
     create_euroset_payment_resource_ok_test/1,
     create_euroset_no_metadata_payment_resource_ok_test/1,
     create_mobile_payment_resource_ok_test/1,
     create_qw_payment_resource_ok_test/1,
     create_qw_payment_resource_with_access_token_generates_different_payment_token/1,
-    create_qw_payment_resource_with_access_token_depends_on_external_id/1,
     create_crypto_payment_resource_ok_test/1,
     create_nonexistent_provider_payment_resource_fails_test/1,
     create_applepay_tokenized_payment_resource_ok_test/1,
@@ -62,8 +61,6 @@
 
 %% 01/01/2100 @ 12:00am (UTC)
 -define(DISTANT_TIMESTAMP, 4102444800).
-
--define(IDEMPOTENT_KEY, <<"capi/CreatePaymentResource/TEST/ext_id">>).
 
 -define(TEST_PAYMENT_TOOL_ARGS, #{
     <<"paymentTool">> => #{
@@ -103,19 +100,18 @@ groups() ->
             create_visa_payment_resource_ok_test,
             % FIXME Made obsolete by client validation
             %create_payment_resource_with_client_url_fail_test,
+            create_payment_resource_invalid_card_test,
+            create_payment_resource_unsupported_card_test,
             create_payment_resource_invalid_cardholder_test,
             create_visa_with_empty_cvc_ok_test,
             create_visa_with_wrong_cvc_test,
             create_visa_with_wrong_cardnumber_test,
-            create_visa_payment_resource_idemp_ok_test,
-            create_visa_payment_resource_idemp_fail_test,
             create_nspkmir_payment_resource_ok_test,
             create_euroset_payment_resource_ok_test,
             create_euroset_no_metadata_payment_resource_ok_test,
             create_mobile_payment_resource_ok_test,
             create_qw_payment_resource_ok_test,
             create_qw_payment_resource_with_access_token_generates_different_payment_token,
-            create_qw_payment_resource_with_access_token_depends_on_external_id,
             create_nonexistent_provider_payment_resource_fails_test,
             create_crypto_payment_resource_ok_test,
             create_applepay_tokenized_payment_resource_ok_test,
@@ -184,7 +180,7 @@ init_per_testcase(authorization_error_wrong_token_type_test, C) ->
 init_per_testcase(ip_replacement_restricted_test, C) ->
     SupPid = capi_ct_helper:start_mocked_service_sup(?MODULE),
     _ = capi_ct_helper_token_keeper:mock_invoice_access_token(SupPid),
-    Restriction = #brstn_Restrictions{capi = #brstn_RestrictionsCommonAPI{ip_replacement_forbidden = true}},
+    Restriction = #rstn_Restrictions{capi = #rstn_RestrictionsCommonAPI{ip_replacement_forbidden = true}},
     _ = capi_ct_helper_bouncer:mock_arbiter(capi_ct_helper_bouncer:judge_always_restricted(Restriction), SupPid),
     [{test_sup, SupPid} | C];
 init_per_testcase(_Name, C) ->
@@ -207,12 +203,7 @@ create_visa_payment_resource_ok_test(Config) ->
             {cds_storage, fun
                 ('PutSession', _) ->
                     {ok, ok};
-                (
-                    'PutCard',
-                    {
-                        #cds_PutCardData{pan = <<"411111", _:6/binary, Mask:4/binary>>}
-                    }
-                ) ->
+                ('PutCard', {#cds_PutCardData{pan = <<"411111", _:6/binary, Mask:4/binary>>}}) ->
                     {ok, #cds_PutCardResult{
                         bank_card = #cds_BankCard{
                             token = ?STRING,
@@ -221,7 +212,6 @@ create_visa_payment_resource_ok_test(Config) ->
                         }
                     }}
             end},
-            {bender, fun('GenerateID', _) -> {ok, capi_ct_helper_bender:get_result(<<"bender_key">>)} end},
             {binbase, fun('Lookup', _) -> {ok, ?BINBASE_LOOKUP_RESULT(<<"VISA">>)} end}
         ],
         Config
@@ -278,12 +268,7 @@ expiration_date_fail_test(Config) ->
             {cds_storage, fun
                 ('PutSession', _) ->
                     {ok, ok};
-                (
-                    'PutCard',
-                    {
-                        #'cds_PutCardData'{pan = <<"411111", _:6/binary, Mask:4/binary>>}
-                    }
-                ) ->
+                ('PutCard', {#'cds_PutCardData'{pan = <<"411111", _:6/binary, Mask:4/binary>>}}) ->
                     {ok, #'cds_PutCardResult'{
                         bank_card = #cds_BankCard{
                             token = ?STRING,
@@ -292,12 +277,10 @@ expiration_date_fail_test(Config) ->
                         }
                     }}
             end},
-            {bender, fun('GenerateID', _) -> {ok, capi_ct_helper_bender:get_result(<<"bender_key">>)} end},
             {binbase, fun('Lookup', _) -> {ok, ?BINBASE_LOOKUP_RESULT(<<"VISA">>)} end}
         ],
         Config
     ),
-    ClientInfo = #{<<"fingerprint">> => <<"test fingerprint">>},
     CardHolder = <<"Alexander Weinerschnitzel">>,
     {error,
         {400, #{
@@ -311,8 +294,68 @@ expiration_date_fail_test(Config) ->
             <<"expDate">> => <<"02/20">>,
             <<"cvv">> => <<"232">>
         },
-        <<"clientInfo">> => ClientInfo
+        <<"clientInfo">> => ?SWAG_CLIENT_INFO
     }).
+
+-spec create_payment_resource_unsupported_card_test(_) -> _.
+create_payment_resource_unsupported_card_test(Config) ->
+    _ = capi_ct_helper:mock_services(
+        [
+            {binbase, fun('Lookup', _) -> {throwing, #binbase_BinNotFound{}} end}
+        ],
+        Config
+    ),
+    ?assertEqual(
+        {error,
+            {400, #{
+                <<"code">> => <<"invalidRequest">>,
+                <<"message">> => <<"Unsupported card">>
+            }}},
+        capi_client_tokens:create_payment_resource(
+            ?config(context, Config),
+            #{
+                <<"paymentTool">> => ?SWAG_BANK_CARD(?PAN),
+                <<"clientInfo">> => ?SWAG_CLIENT_INFO
+            }
+        )
+    ).
+
+-spec create_payment_resource_invalid_card_test(_) -> _.
+create_payment_resource_invalid_card_test(Config) ->
+    _ = capi_ct_helper:mock_services(
+        [
+            {binbase, fun('Lookup', _) -> {ok, ?BINBASE_LOOKUP_RESULT(<<"VISA">>)} end}
+        ],
+        Config
+    ),
+    ?assertEqual(
+        {error,
+            {400, #{
+                <<"code">> => <<"invalidRequest">>,
+                <<"message">> => <<"Invalid cardNumber checksum">>
+            }}},
+        capi_client_tokens:create_payment_resource(
+            ?config(context, Config),
+            #{
+                <<"paymentTool">> => ?SWAG_BANK_CARD(<<"4111111111111112">>),
+                <<"clientInfo">> => ?SWAG_CLIENT_INFO
+            }
+        )
+    ),
+    ?assertEqual(
+        {error,
+            {400, #{
+                <<"code">> => <<"invalidRequest">>,
+                <<"message">> => <<"Invalid cardNumber length">>
+            }}},
+        capi_client_tokens:create_payment_resource(
+            ?config(context, Config),
+            #{
+                <<"paymentTool">> => ?SWAG_BANK_CARD(<<"41111111111114">>),
+                <<"clientInfo">> => ?SWAG_CLIENT_INFO
+            }
+        )
+    ).
 
 -spec create_payment_resource_invalid_cardholder_test(_) -> _.
 create_payment_resource_invalid_cardholder_test(Config) ->
@@ -321,12 +364,7 @@ create_payment_resource_invalid_cardholder_test(Config) ->
             {cds_storage, fun
                 ('PutSession', _) ->
                     {ok, ok};
-                (
-                    'PutCard',
-                    {
-                        #cds_PutCardData{pan = <<"411111", _:6/binary, Mask:4/binary>>}
-                    }
-                ) ->
+                ('PutCard', {#cds_PutCardData{pan = <<"411111", _:6/binary, Mask:4/binary>>}}) ->
                     {ok, #cds_PutCardResult{
                         bank_card = #cds_BankCard{
                             token = ?STRING,
@@ -335,37 +373,30 @@ create_payment_resource_invalid_cardholder_test(Config) ->
                         }
                     }}
             end},
-            {bender, fun('GenerateID', _) -> {ok, capi_ct_helper_bender:get_result(<<"bender_key">>)} end},
             {binbase, fun('Lookup', _) -> {ok, ?BINBASE_LOOKUP_RESULT(<<"VISA">>)} end}
         ],
         Config
     ),
-    ClientInfo = #{<<"fingerprint">> => <<"test fingerprint">>},
-    PaymentTool = #{
-        <<"paymentToolType">> => <<"CardData">>,
-        <<"cardNumber">> => <<"4111111111111111">>,
-        <<"expDate">> => <<"08/27">>,
-        <<"cvv">> => <<"232">>
-    },
+    PaymentTool = ?SWAG_BANK_CARD(<<"4111111111111111">>),
     {ok, _} = capi_client_tokens:create_payment_resource(
         ?config(context, Config),
         #{
             <<"paymentTool">> => PaymentTool#{<<"cardHolder">> => <<"Вася Иванов"/utf8>>},
-            <<"clientInfo">> => ClientInfo
+            <<"clientInfo">> => ?SWAG_CLIENT_INFO
         }
     ),
     {error, {request_validation_failed, _}} = capi_client_tokens:create_payment_resource(
         ?config(context, Config),
         #{
             <<"paymentTool">> => PaymentTool#{<<"cardHolder">> => <<"4111111111111111">>},
-            <<"clientInfo">> => ClientInfo
+            <<"clientInfo">> => ?SWAG_CLIENT_INFO
         }
     ),
     {error, {request_validation_failed, _}} = capi_client_tokens:create_payment_resource(
         ?config(context, Config),
         #{
             <<"paymentTool">> => PaymentTool#{<<"cardHolder">> => <<"Вася123"/utf8>>},
-            <<"clientInfo">> => ClientInfo
+            <<"clientInfo">> => ?SWAG_CLIENT_INFO
         }
     ).
 
@@ -376,12 +407,7 @@ create_visa_with_empty_cvc_ok_test(Config) ->
             {cds_storage, fun
                 ('PutSession', _) ->
                     {ok, ok};
-                (
-                    'PutCard',
-                    {
-                        #cds_PutCardData{pan = <<"411111", _:6/binary, Mask:4/binary>>}
-                    }
-                ) ->
+                ('PutCard', {#cds_PutCardData{pan = <<"411111", _:6/binary, Mask:4/binary>>}}) ->
                     {ok, #cds_PutCardResult{
                         bank_card = #cds_BankCard{
                             token = ?STRING,
@@ -390,7 +416,6 @@ create_visa_with_empty_cvc_ok_test(Config) ->
                         }
                     }}
             end},
-            {bender, fun('GenerateID', _) -> {ok, capi_ct_helper_bender:get_result(<<"bender_key">>)} end},
             {binbase, fun('Lookup', _) -> {ok, ?BINBASE_LOOKUP_RESULT(<<"VISA">>)} end}
         ],
         Config
@@ -418,7 +443,6 @@ create_visa_with_empty_cvc_ok_test(Config) ->
 create_visa_with_wrong_cvc_test(Config) ->
     _ = capi_ct_helper:mock_services(
         [
-            {bender, fun('GenerateID', _) -> {ok, capi_ct_helper_bender:get_result(<<"bender_key">>)} end},
             {binbase, fun('Lookup', _) -> {ok, ?BINBASE_LOOKUP_RESULT(<<"VISA">>)} end}
         ],
         Config
@@ -444,7 +468,6 @@ create_visa_with_wrong_cvc_test(Config) ->
 create_visa_with_wrong_cardnumber_test(Config) ->
     _ = capi_ct_helper:mock_services(
         [
-            {bender, fun('GenerateID', _) -> {ok, capi_ct_helper_bender:get_result(<<"bender_key">>)} end},
             {binbase, fun('Lookup', _) -> {ok, ?BINBASE_LOOKUP_RESULT(<<"VISA">>)} end}
         ],
         Config
@@ -466,135 +489,6 @@ create_visa_with_wrong_cardnumber_test(Config) ->
             <<"clientInfo">> => ClientInfo
         }).
 
--spec create_visa_payment_resource_idemp_ok_test(_) -> _.
-create_visa_payment_resource_idemp_ok_test(Config) ->
-    ExternalID = <<"Degusi :P">>,
-    _ = capi_ct_helper:mock_services(
-        [
-            {cds_storage, fun
-                ('PutSession', _) ->
-                    {ok, ok};
-                (
-                    'PutCard',
-                    {
-                        #cds_PutCardData{pan = <<"411111", _:6/binary, Mask:4/binary>>}
-                    }
-                ) ->
-                    {ok, #cds_PutCardResult{
-                        bank_card = #cds_BankCard{
-                            token = ?STRING,
-                            bin = <<"411111">>,
-                            last_digits = Mask
-                        }
-                    }}
-            end},
-            {bender, fun('GenerateID', _) -> {ok, capi_ct_helper_bender:get_result(<<"bender_key">>)} end},
-            {binbase, fun('Lookup', _) -> {ok, ?BINBASE_LOOKUP_RESULT(<<"VISA">>)} end}
-        ],
-        Config
-    ),
-    ClientInfo = #{<<"fingerprint">> => <<"test fingerprint">>},
-    Params = #{
-        <<"externalID">> => ExternalID,
-        <<"paymentTool">> => #{
-            <<"paymentToolType">> => <<"CardData">>,
-            <<"cardNumber">> => <<"4111111111111111">>,
-            <<"cardHolder">> => <<"Alexander Weinerschnitzel">>,
-            <<"expDate">> => <<"08/27">>,
-            <<"cvv">> => <<"232">>
-        },
-        <<"clientInfo">> => ClientInfo
-    },
-    PaymentToolDetails = #{
-        <<"detailsType">> => <<"PaymentToolDetailsBankCard">>,
-        <<"paymentSystem">> => <<"VISA">>,
-        <<"last4">> => <<"1111">>,
-        <<"first6">> => <<"411111">>,
-        <<"cardNumberMask">> => <<"411111******1111">>
-    },
-    {ok, #{
-        <<"paymentToolToken">> := PT1,
-        <<"paymentSession">> := ToolSession,
-        <<"paymentToolDetails">> := PaymentToolDetails
-    }} = capi_client_tokens:create_payment_resource(?config(context, Config), Params),
-    {ok, #{
-        <<"paymentToolToken">> := PT2,
-        <<"paymentSession">> := ToolSession,
-        <<"paymentToolDetails">> := PaymentToolDetails
-    }} = capi_client_tokens:create_payment_resource(?config(context, Config), Params),
-    PaymentTool1 = decrypt_payment_tool(PT1),
-    PaymentTool2 = decrypt_payment_tool(PT2),
-    ?assertEqual(PaymentTool1, PaymentTool2).
-
--spec create_visa_payment_resource_idemp_fail_test(_) -> _.
-create_visa_payment_resource_idemp_fail_test(Config) ->
-    ExternalID = <<"Degusi :P">>,
-    BenderKey = <<"bender key">>,
-    Token1 = <<"TOKEN1">>,
-    Token2 = <<"TOKEN2">>,
-    Ctx = capi_msgp_marshalling:marshal(#{<<"params_hash">> => erlang:phash2(Token1)}),
-    _ = capi_ct_helper:mock_services(
-        [
-            {cds_storage, fun
-                ('PutSession', _) ->
-                    {ok, ok};
-                (
-                    'PutCard',
-                    {
-                        #cds_PutCardData{pan = <<"532130", _:6/binary, LastDigits:4/binary>>}
-                    }
-                ) ->
-                    {ok, #cds_PutCardResult{
-                        bank_card = #cds_BankCard{
-                            token = Token2,
-                            bin = <<"532130">>,
-                            last_digits = LastDigits
-                        }
-                    }};
-                (
-                    'PutCard',
-                    {
-                        #cds_PutCardData{pan = <<"411111", _:6/binary, LastDigits:4/binary>>}
-                    }
-                ) ->
-                    {ok, #cds_PutCardResult{
-                        bank_card = #cds_BankCard{
-                            token = Token1,
-                            bin = <<"411111">>,
-                            last_digits = LastDigits
-                        }
-                    }}
-            end},
-            {bender, fun('GenerateID', _) -> {ok, capi_ct_helper_bender:get_result(BenderKey, Ctx)} end},
-            {binbase, fun('Lookup', _) -> {ok, ?BINBASE_LOOKUP_RESULT(<<"VISA">>)} end}
-        ],
-        Config
-    ),
-    ClientInfo = #{<<"fingerprint">> => <<"test fingerprint">>},
-    PaymentTool = #{
-        <<"paymentToolType">> => <<"CardData">>,
-        <<"cardNumber">> => <<"4111111111111111">>,
-        <<"cardHolder">> => <<"Alexander Weinerschnitzel">>,
-        <<"expDate">> => <<"08/27">>,
-        <<"cvv">> => <<"232">>
-    },
-    Params = #{
-        <<"externalID">> => ExternalID,
-        <<"paymentTool">> => PaymentTool,
-        <<"clientInfo">> => ClientInfo
-    },
-    Params2 = #{
-        <<"externalID">> => ExternalID,
-        <<"paymentTool">> => PaymentTool#{<<"cardNumber">> => <<"5321301234567892">>},
-        <<"clientInfo">> => ClientInfo
-    },
-    {ok, _} = capi_client_tokens:create_payment_resource(?config(context, Config), Params),
-    {error,
-        {409, #{
-            <<"externalID">> := ExternalID,
-            <<"message">> := <<"This 'externalID' has been used by another request">>
-        }}} = capi_client_tokens:create_payment_resource(?config(context, Config), Params2).
-
 -spec create_nspkmir_payment_resource_ok_test(_) -> _.
 create_nspkmir_payment_resource_ok_test(Config) ->
     _ = capi_ct_helper:mock_services(
@@ -602,12 +496,7 @@ create_nspkmir_payment_resource_ok_test(Config) ->
             {cds_storage, fun
                 ('PutSession', _) ->
                     {ok, ok};
-                (
-                    'PutCard',
-                    {
-                        #cds_PutCardData{pan = <<"22022002", _:6/binary, LastDigits:2/binary>>}
-                    }
-                ) ->
+                ('PutCard', {#cds_PutCardData{pan = <<"22022002", _:6/binary, LastDigits:2/binary>>}}) ->
                     {ok, #cds_PutCardResult{
                         bank_card = #cds_BankCard{
                             token = ?STRING,
@@ -616,7 +505,6 @@ create_nspkmir_payment_resource_ok_test(Config) ->
                         }
                     }}
             end},
-            {bender, fun('GenerateID', _) -> {ok, capi_ct_helper_bender:get_result(<<"bender key">>)} end},
             {binbase, fun('Lookup', _) -> {ok, ?BINBASE_LOOKUP_RESULT(<<"NSPK MIR">>)} end}
         ],
         Config
@@ -734,10 +622,8 @@ create_qw_payment_resource_ok_test(Config) ->
 
 -spec create_qw_payment_resource_with_access_token_generates_different_payment_token(_) -> _.
 create_qw_payment_resource_with_access_token_generates_different_payment_token(Config) ->
-    BenderResult = capi_ct_helper_bender:get_result(<<"benderkey">>),
     _ = capi_ct_helper:mock_services(
         [
-            {bender, fun('GenerateID', _) -> {ok, BenderResult} end},
             {tds_storage, fun('PutToken', _) -> {ok, ok} end}
         ],
         Config
@@ -765,43 +651,6 @@ create_qw_payment_resource_with_access_token_generates_different_payment_token(C
     {ok, #{<<"paymentToolToken">> := Token0}} = Result0,
     {ok, #{<<"paymentToolToken">> := Token1}} = Result1,
     ?assertNotEqual(Token0, Token1).
-
--spec create_qw_payment_resource_with_access_token_depends_on_external_id(_) -> _.
-create_qw_payment_resource_with_access_token_depends_on_external_id(Config) ->
-    BenderResultExtID = capi_ct_helper_bender:get_result(<<"benderkey0">>),
-    BenderResultNoExtId = capi_ct_helper_bender:get_result(<<"benderkey1">>),
-    _ = capi_ct_helper:mock_services(
-        [
-            {bender, fun
-                ('GenerateID', {?IDEMPOTENT_KEY, _, _}) -> {ok, BenderResultExtID};
-                ('GenerateID', _Args) -> {ok, BenderResultNoExtId}
-            end},
-            {tds_storage, fun('PutToken', _) -> {ok, ok} end}
-        ],
-        Config
-    ),
-    ClientInfo = #{<<"fingerprint">> => <<"test fingerprint">>},
-    PaymentParamsNoExtId = #{
-        <<"paymentTool">> => #{
-            <<"paymentToolType">> => <<"DigitalWalletData">>,
-            <<"id">> => <<"+79876543210">>,
-            <<"provider">> => <<"qiwi">>,
-            <<"token">> => <<"some_token">>
-        },
-        <<"clientInfo">> => ClientInfo
-    },
-    PaymentParamsExtId = PaymentParamsNoExtId#{<<"externalID">> => <<"ext_id">>},
-    ResultExtId0 = capi_client_tokens:create_payment_resource(?config(context, Config), PaymentParamsExtId),
-    ResultExtId1 = capi_client_tokens:create_payment_resource(?config(context, Config), PaymentParamsExtId),
-    ResultNoExtId = capi_client_tokens:create_payment_resource(?config(context, Config), PaymentParamsNoExtId),
-    {ok, #{<<"paymentToolToken">> := TokenExtId0}} = ResultExtId0,
-    {ok, #{<<"paymentToolToken">> := TokenExtId1}} = ResultExtId1,
-    {ok, #{<<"paymentToolToken">> := TokenNoExtId}} = ResultNoExtId,
-    PaymentTool1 = decrypt_payment_tool(TokenExtId0),
-    PaymentTool2 = decrypt_payment_tool(TokenExtId1),
-    PaymentTool3 = decrypt_payment_tool(TokenNoExtId),
-    ?assertEqual(PaymentTool1, PaymentTool2),
-    ?assertNotEqual(PaymentTool1, PaymentTool3).
 
 -spec create_nonexistent_provider_payment_resource_fails_test(_) -> _.
 create_nonexistent_provider_payment_resource_fails_test(Config) ->
@@ -844,7 +693,6 @@ create_applepay_tokenized_payment_resource_ok_test(Config) ->
                 ('PutSession', _) -> {ok, ok};
                 ('PutCard', _) -> {ok, ?PUT_CARD_RESULT}
             end},
-            {bender, fun('GenerateID', _) -> {ok, capi_ct_helper_bender:get_result(<<"bender key">>)} end},
             {binbase, fun('Lookup', _) -> {ok, ?BINBASE_LOOKUP_RESULT} end}
         ],
         Config
@@ -889,7 +737,6 @@ create_googlepay_tokenized_payment_resource_ok_test(Config) ->
                 ('PutSession', _) -> {ok, ok};
                 ('PutCard', _) -> {ok, ?PUT_CARD_RESULT}
             end},
-            {bender, fun('GenerateID', _) -> {ok, capi_ct_helper_bender:get_result(<<"bender key">>)} end},
             {binbase, fun('Lookup', _) -> {ok, ?BINBASE_LOOKUP_RESULT} end}
         ],
         Config
@@ -940,7 +787,6 @@ create_googlepay_plain_payment_resource_ok_test(Config) ->
                 ('PutSession', _) -> {ok, ok};
                 ('PutCard', _) -> {ok, ?PUT_CARD_RESULT}
             end},
-            {bender, fun('GenerateID', _) -> {ok, capi_ct_helper_bender:get_result(<<"bender key">>)} end},
             {binbase, fun('Lookup', _) -> {ok, ?BINBASE_LOOKUP_RESULT} end}
         ],
         Config
@@ -989,7 +835,6 @@ create_yandexpay_tokenized_payment_resource_ok_test(Config) ->
                 ('PutSession', _) -> {ok, ok};
                 ('PutCard', _) -> {ok, ?PUT_CARD_RESULT}
             end},
-            {bender, fun('GenerateID', _) -> {ok, capi_ct_helper_bender:get_result(<<"bender key">>)} end},
             {binbase, fun('Lookup', _) -> {ok, ?BINBASE_LOOKUP_RESULT} end}
         ],
         Config
@@ -1075,7 +920,6 @@ authorization_positive_lifetime_ok_test(Config) ->
                 ('PutSession', _) -> {ok, ok};
                 ('PutCard', _) -> {ok, ?PUT_CARD_RESULT}
             end},
-            {bender, fun('GenerateID', _) -> {ok, capi_ct_helper_bender:get_result(<<"bender key">>)} end},
             {binbase, fun('Lookup', _) -> {ok, ?BINBASE_LOOKUP_RESULT} end}
         ],
         Config
@@ -1094,7 +938,6 @@ authorization_unlimited_lifetime_ok_test(Config) ->
                 ('PutSession', _) -> {ok, ok};
                 ('PutCard', _) -> {ok, ?PUT_CARD_RESULT}
             end},
-            {bender, fun('GenerateID', _) -> {ok, capi_ct_helper_bender:get_result(<<"bender key">>)} end},
             {binbase, fun('Lookup', _) -> {ok, ?BINBASE_LOOKUP_RESULT} end}
         ],
         Config
@@ -1113,7 +956,6 @@ authorization_far_future_deadline_ok_test(Config) ->
                 ('PutSession', _) -> {ok, ok};
                 ('PutCard', _) -> {ok, ?PUT_CARD_RESULT}
             end},
-            {bender, fun('GenerateID', _) -> {ok, capi_ct_helper_bender:get_result(<<"bender key">>)} end},
             {binbase, fun('Lookup', _) -> {ok, ?BINBASE_LOOKUP_RESULT} end}
         ],
         Config
