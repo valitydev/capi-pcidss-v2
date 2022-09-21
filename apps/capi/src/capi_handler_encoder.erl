@@ -1,5 +1,6 @@
 -module(capi_handler_encoder).
 
+-include_lib("damsel/include/dmsl_base_thrift.hrl").
 -include_lib("damsel/include/dmsl_domain_thrift.hrl").
 
 -export([encode_client_info/1]).
@@ -21,7 +22,7 @@ encode_client_info(ClientInfo) ->
 
 -spec encode_content(json, term()) -> encode_data().
 encode_content(json, Data) ->
-    #'Content'{
+    #base_Content{
         type = <<"application/json">>,
         data = jsx:encode(Data)
     }.

@@ -1,6 +1,6 @@
 -module(capi_crypto).
 
--include_lib("damsel/include/dmsl_payment_tool_token_thrift.hrl").
+-include_lib("damsel/include/dmsl_paytool_token_thrift.hrl").
 
 -type token() :: binary().
 -type token_data() :: #{
@@ -8,8 +8,8 @@
     valid_until := deadline()
 }.
 -type payment_tool() :: dmsl_domain_thrift:'PaymentTool'().
--type payment_tool_token() :: dmsl_payment_tool_token_thrift:'PaymentToolToken'().
--type payment_tool_token_payload() :: dmsl_payment_tool_token_thrift:'PaymentToolTokenPayload'().
+-type payment_tool_token() :: dmsl_paytool_token_thrift:'PaymentToolToken'().
+-type payment_tool_token_payload() :: dmsl_paytool_token_thrift:'PaymentToolTokenPayload'().
 -type deadline() :: capi_utils:deadline().
 
 -export_type([token/0]).
@@ -21,7 +21,7 @@
 -spec encode_token(token_data()) -> token().
 encode_token(TokenData) ->
     PaymentToolToken = encode_payment_tool_token(TokenData),
-    ThriftType = {struct, struct, {dmsl_payment_tool_token_thrift, 'PaymentToolToken'}},
+    ThriftType = {struct, struct, {dmsl_paytool_token_thrift, 'PaymentToolToken'}},
     {ok, EncodedToken} = lechiffre:encode(ThriftType, PaymentToolToken),
     TokenVersion = token_version(),
     <<TokenVersion/binary, ".", EncodedToken/binary>>.
@@ -43,11 +43,11 @@ token_version() ->
     <<"v2">>.
 
 decrypt_token(EncryptedPaymentToolToken) ->
-    ThriftType = {struct, struct, {dmsl_payment_tool_token_thrift, 'PaymentToolToken'}},
+    ThriftType = {struct, struct, {dmsl_paytool_token_thrift, 'PaymentToolToken'}},
     case lechiffre:decode(ThriftType, EncryptedPaymentToolToken) of
         {ok, PaymentToolToken} ->
-            Payload = PaymentToolToken#ptt_PaymentToolToken.payload,
-            ValidUntil = PaymentToolToken#ptt_PaymentToolToken.valid_until,
+            Payload = PaymentToolToken#paytool_token_PaymentToolToken.payload,
+            ValidUntil = PaymentToolToken#paytool_token_PaymentToolToken.valid_until,
             {ok, #{
                 payment_tool => decode_payment_tool_token_payload(Payload),
                 valid_until => decode_deadline(ValidUntil)
@@ -60,7 +60,7 @@ decrypt_token(EncryptedPaymentToolToken) ->
 encode_payment_tool_token(TokenData) ->
     Payload = maps:get(payment_tool, TokenData),
     ValidUntil = maps:get(valid_until, TokenData),
-    #ptt_PaymentToolToken{
+    #paytool_token_PaymentToolToken{
         payload = encode_payment_tool_token_payload(Payload),
         valid_until = encode_deadline(ValidUntil)
     }.
@@ -73,23 +73,23 @@ encode_deadline(Deadline) ->
 
 -spec encode_payment_tool_token_payload(payment_tool()) -> payment_tool_token_payload().
 encode_payment_tool_token_payload({bank_card, BankCard}) ->
-    {bank_card_payload, #ptt_BankCardPayload{
+    {bank_card_payload, #paytool_token_BankCardPayload{
         bank_card = BankCard
     }};
 encode_payment_tool_token_payload({payment_terminal, PaymentTerminal}) ->
-    {payment_terminal_payload, #ptt_PaymentTerminalPayload{
+    {payment_terminal_payload, #paytool_token_PaymentTerminalPayload{
         payment_terminal = PaymentTerminal
     }};
 encode_payment_tool_token_payload({digital_wallet, DigitalWallet}) ->
-    {digital_wallet_payload, #ptt_DigitalWalletPayload{
+    {digital_wallet_payload, #paytool_token_DigitalWalletPayload{
         digital_wallet = DigitalWallet
     }};
 encode_payment_tool_token_payload({crypto_currency, CryptoCurrency}) ->
-    {crypto_currency_payload, #ptt_CryptoCurrencyPayload{
+    {crypto_currency_payload, #paytool_token_CryptoCurrencyPayload{
         crypto_currency = CryptoCurrency
     }};
 encode_payment_tool_token_payload({mobile_commerce, MobileCommerce}) ->
-    {mobile_commerce_payload, #ptt_MobileCommercePayload{
+    {mobile_commerce_payload, #paytool_token_MobileCommercePayload{
         mobile_commerce = MobileCommerce
     }}.
 
@@ -103,13 +103,13 @@ decode_deadline(Deadline) ->
 decode_payment_tool_token_payload(PaymentToolToken) ->
     case PaymentToolToken of
         {bank_card_payload, Payload} ->
-            {bank_card, Payload#ptt_BankCardPayload.bank_card};
+            {bank_card, Payload#paytool_token_BankCardPayload.bank_card};
         {payment_terminal_payload, Payload} ->
-            {payment_terminal, Payload#ptt_PaymentTerminalPayload.payment_terminal};
+            {payment_terminal, Payload#paytool_token_PaymentTerminalPayload.payment_terminal};
         {digital_wallet_payload, Payload} ->
-            {digital_wallet, Payload#ptt_DigitalWalletPayload.digital_wallet};
+            {digital_wallet, Payload#paytool_token_DigitalWalletPayload.digital_wallet};
         {crypto_currency_payload, Payload} ->
-            {crypto_currency, Payload#ptt_CryptoCurrencyPayload.crypto_currency};
+            {crypto_currency, Payload#paytool_token_CryptoCurrencyPayload.crypto_currency};
         {mobile_commerce_payload, Payload} ->
-            {mobile_commerce, Payload#ptt_MobileCommercePayload.mobile_commerce}
+            {mobile_commerce, Payload#paytool_token_MobileCommercePayload.mobile_commerce}
     end.
