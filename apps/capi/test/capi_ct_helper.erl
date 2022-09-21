@@ -71,7 +71,7 @@ init_suite(Module, Config, CapiEnv) ->
         [
             {
                 'Repository',
-                {dmsl_domain_config_thrift, 'Repository'},
+                {dmsl_domain_conf_thrift, 'Repository'},
                 fun('Checkout', _) ->
                     {ok, #domain_conf_Snapshot{
                         version = 1,
