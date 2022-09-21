@@ -5,7 +5,7 @@
 -type party_id() :: dmsl_domain_thrift:'PartyID'().
 -type shop_id() :: dmsl_domain_thrift:'ShopID'().
 -type realm() :: dmsl_domain_thrift:'PaymentInstitutionRealm'().
--type merchant_data() :: dmsl_payment_tool_provider_thrift:'MerchantID'().
+-type merchant_data() :: dmsl_paytool_provider_thrift:'MerchantID'().
 -type merchant_id() :: binary().
 
 -export([party_id/1]).
@@ -15,7 +15,7 @@
 -export([encode/1]).
 -export([decode/1]).
 
--define(THRIFT_TYPE, {struct, struct, {dmsl_payment_tool_provider_thrift, 'MerchantID'}}).
+-define(THRIFT_TYPE, {struct, struct, {dmsl_paytool_provider_thrift, 'MerchantID'}}).
 
 -spec party_id(merchant_data()) -> party_id().
 party_id(#paytool_provider_MerchantID{party_id = PartyID}) ->
