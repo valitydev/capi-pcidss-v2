@@ -39,14 +39,14 @@
 -define(UNWRAPPED_PAYMENT_TOOL(Details),
     ?UNWRAPPED_PAYMENT_TOOL(
         Details,
-        {tokenized_card, #paytoolprv_TokenizedCard{
+        {tokenized_card, #paytool_provider_TokenizedCard{
             dpan = <<"5321301234567892">>,
-            exp_date = #paytoolprv_ExpDate{
+            exp_date = #paytool_provider_ExpDate{
                 month = 10,
                 year = 2028
             },
             auth_data =
-                {auth_3ds, #paytoolprv_Auth3DS{
+                {auth_3ds, #paytool_provider_Auth3DS{
                     cryptogram = ?STRING,
                     eci = ?STRING
                 }}
@@ -54,9 +54,9 @@
     )
 ).
 
--define(UNWRAPPED_PAYMENT_TOOL(Details, PaymentData), #paytoolprv_UnwrappedPaymentTool{
+-define(UNWRAPPED_PAYMENT_TOOL(Details, PaymentData), #paytool_provider_UnwrappedPaymentTool{
     payment_data = PaymentData,
-    card_info = #paytoolprv_CardInfo{
+    card_info = #paytool_provider_CardInfo{
         display_name = <<"Master 7892">>,
         cardholder_name = ?STRING,
         last_4_digits = <<"7892">>,
@@ -77,7 +77,7 @@
 >>).
 
 -define(APPLE_PAY_DETAILS,
-    {apple, #paytoolprv_ApplePayDetails{
+    {apple, #paytool_provider_ApplePayDetails{
         transaction_id = ?STRING,
         amount = ?INTEGER,
         currency_numeric_code = 643,
@@ -86,14 +86,14 @@
 ).
 
 -define(GOOGLE_PAY_DETAILS,
-    {google, #paytoolprv_GooglePayDetails{
+    {google, #paytool_provider_GooglePayDetails{
         message_id = ?MESSAGE_ID,
         message_expiration = ?TIMESTAMP
     }}
 ).
 
 -define(YANDEX_PAY_DETAILS,
-    {yandex, #paytoolprv_YandexPayDetails{
+    {yandex, #paytool_provider_YandexPayDetails{
         message_id = ?MESSAGE_ID,
         message_expiration = ?TIMESTAMP
     }}

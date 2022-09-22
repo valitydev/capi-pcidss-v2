@@ -3,10 +3,11 @@
 -type token_provider() :: yandexpay | applepay | googlepay | samsungpay.
 -type mobile_operator() :: mts | beeline | megafone | tele2 | yota.
 
+-include_lib("damsel/include/dmsl_base_thrift.hrl").
 -include_lib("damsel/include/dmsl_domain_thrift.hrl").
 -include_lib("cds_proto/include/cds_proto_storage_thrift.hrl").
 -include_lib("tds_proto/include/tds_proto_storage_thrift.hrl").
--include_lib("damsel/include/dmsl_payment_tool_provider_thrift.hrl").
+-include_lib("damsel/include/dmsl_paytool_provider_thrift.hrl").
 -include_lib("moneypenny/include/moneypenny_mnp_thrift.hrl").
 
 -include_lib("bouncer_proto/include/bouncer_rstn_thrift.hrl").
@@ -408,7 +409,7 @@ unwrap_card_data_token(Data, Context) ->
     case capi_handler_utils:service_call(Call, Context) of
         {ok, Tool} ->
             Tool;
-        {exception, #'InvalidRequest'{}} ->
+        {exception, #base_InvalidRequest{}} ->
             throw({ok, logic_error(invalidRequest, <<"Tokenized card data is invalid">>)})
     end.
 
@@ -449,28 +450,28 @@ encode_wrapped_payment_tool(Data) ->
     EncodedID = get_token_provider_merchant_id(Data),
     MerchantID = unwrap_merchant_id(Provider, EncodedID),
     RealmMode = maps:get(realm, MerchantID, undefined),
-    #paytoolprv_WrappedPaymentTool{
+    #paytool_provider_WrappedPaymentTool{
         request = encode_payment_request(Data),
         realm = RealmMode
     }.
 
 encode_payment_request(#{<<"provider">> := <<"ApplePay">>} = Data) ->
-    {apple, #paytoolprv_ApplePayRequest{
+    {apple, #paytool_provider_ApplePayRequest{
         merchant_id = maps:get(<<"merchantID">>, Data),
         payment_token = capi_handler_encoder:encode_content(json, maps:get(<<"paymentToken">>, Data))
     }};
 encode_payment_request(#{<<"provider">> := <<"GooglePay">>} = Data) ->
-    {google, #paytoolprv_GooglePayRequest{
+    {google, #paytool_provider_GooglePayRequest{
         gateway_merchant_id = maps:get(<<"gatewayMerchantID">>, Data),
         payment_token = capi_handler_encoder:encode_content(json, maps:get(<<"paymentToken">>, Data))
     }};
 encode_payment_request(#{<<"provider">> := <<"SamsungPay">>} = Data) ->
-    {samsung, #paytoolprv_SamsungPayRequest{
+    {samsung, #paytool_provider_SamsungPayRequest{
         service_id = genlib_map:get(<<"serviceID">>, Data),
         reference_id = genlib_map:get(<<"referenceID">>, Data)
     }};
 encode_payment_request(#{<<"provider">> := <<"YandexPay">>} = Data) ->
-    {yandex, #paytoolprv_YandexPayRequest{
+    {yandex, #paytool_provider_YandexPayRequest{
         gateway_merchant_id = maps:get(<<"gatewayMerchantID">>, Data),
         payment_token = capi_handler_encoder:encode_content(json, maps:get(<<"paymentToken">>, Data))
     }}.
@@ -479,8 +480,8 @@ construct_tokenized_bank_card(
     Token,
     CardData,
     SessionData,
-    #paytoolprv_UnwrappedPaymentTool{
-        card_info = #paytoolprv_CardInfo{
+    #paytool_provider_UnwrappedPaymentTool{
+        card_info = #paytool_provider_CardInfo{
             last_4_digits = Last4
         },
         payment_data = PaymentData,
@@ -506,14 +507,14 @@ construct_tokenized_bank_card(
     Deadline = capi_utils:deadline_from_binary(ValidUntil),
     {BankCard2, Deadline}.
 
-get_tokenized_bin({card, #paytoolprv_Card{pan = PAN}}) ->
+get_tokenized_bin({card, #paytool_provider_Card{pan = PAN}}) ->
     get_first6(PAN);
 get_tokenized_bin({tokenized_card, _}) ->
     <<>>.
 
 % Prefer to get last4 from the PAN itself rather than using the one from the adapter
 % On the other hand, getting a DPAN and no last4 from the adapter is unsupported
-get_tokenized_pan(_Last4, {card, #paytoolprv_Card{pan = PAN}}) ->
+get_tokenized_pan(_Last4, {card, #paytool_provider_Card{pan = PAN}}) ->
     get_last4(PAN);
 get_tokenized_pan(Last4, _PaymentData) when Last4 =/= undefined ->
     Last4.
@@ -558,7 +559,7 @@ extract_payment_tool_provider_metadata({_Provider, Details}) ->
         <<"details">> => extract_payment_details_metadata(Details)
     }}.
 
-extract_payment_details_metadata(#paytoolprv_ApplePayDetails{
+extract_payment_details_metadata(#paytool_provider_ApplePayDetails{
     transaction_id = TransactionID,
     device_id = DeviceID
 }) ->
@@ -566,19 +567,19 @@ extract_payment_details_metadata(#paytoolprv_ApplePayDetails{
         <<"transaction_id">> => TransactionID,
         <<"device_id">> => DeviceID
     };
-extract_payment_details_metadata(#paytoolprv_SamsungPayDetails{
+extract_payment_details_metadata(#paytool_provider_SamsungPayDetails{
     device_id = DeviceID
 }) ->
     #{
         <<"device_id">> => DeviceID
     };
-extract_payment_details_metadata(#paytoolprv_GooglePayDetails{
+extract_payment_details_metadata(#paytool_provider_GooglePayDetails{
     message_id = MessageID
 }) ->
     #{
         <<"message_id">> => MessageID
     };
-extract_payment_details_metadata(#paytoolprv_YandexPayDetails{
+extract_payment_details_metadata(#paytool_provider_YandexPayDetails{
     message_id = MessageID
 }) ->
     #{
@@ -587,16 +588,16 @@ extract_payment_details_metadata(#paytoolprv_YandexPayDetails{
 
 %%
 
-encode_tokenized_card_data(#paytoolprv_UnwrappedPaymentTool{
+encode_tokenized_card_data(#paytool_provider_UnwrappedPaymentTool{
     payment_data =
-        {tokenized_card, #paytoolprv_TokenizedCard{
+        {tokenized_card, #paytool_provider_TokenizedCard{
             dpan = DPAN,
-            exp_date = #paytoolprv_ExpDate{
+            exp_date = #paytool_provider_ExpDate{
                 month = Month,
                 year = Year
             }
         }},
-    card_info = #paytoolprv_CardInfo{
+    card_info = #paytool_provider_CardInfo{
         cardholder_name = CardholderName
     }
 }) ->
@@ -606,16 +607,16 @@ encode_tokenized_card_data(#paytoolprv_UnwrappedPaymentTool{
         cardholder => CardholderName,
         exp_date => ExpDate
     });
-encode_tokenized_card_data(#paytoolprv_UnwrappedPaymentTool{
+encode_tokenized_card_data(#paytool_provider_UnwrappedPaymentTool{
     payment_data =
-        {card, #paytoolprv_Card{
+        {card, #paytool_provider_Card{
             pan = PAN,
-            exp_date = #paytoolprv_ExpDate{
+            exp_date = #paytool_provider_ExpDate{
                 month = Month,
                 year = Year
             }
         }},
-    card_info = #paytoolprv_CardInfo{
+    card_info = #paytool_provider_CardInfo{
         cardholder_name = CardholderName
     }
 }) ->
@@ -626,11 +627,11 @@ encode_tokenized_card_data(#paytoolprv_UnwrappedPaymentTool{
         exp_date => ExpDate
     }).
 
-encode_tokenized_session_data(#paytoolprv_UnwrappedPaymentTool{
+encode_tokenized_session_data(#paytool_provider_UnwrappedPaymentTool{
     payment_data =
-        {tokenized_card, #paytoolprv_TokenizedCard{
+        {tokenized_card, #paytool_provider_TokenizedCard{
             auth_data =
-                {auth_3ds, #paytoolprv_Auth3DS{
+                {auth_3ds, #paytool_provider_Auth3DS{
                     cryptogram = Cryptogram,
                     eci = ECI
                 }}
@@ -643,8 +644,8 @@ encode_tokenized_session_data(#paytoolprv_UnwrappedPaymentTool{
                 eci = ECI
             }}
     };
-encode_tokenized_session_data(#paytoolprv_UnwrappedPaymentTool{
-    payment_data = {card, #paytoolprv_Card{}}
+encode_tokenized_session_data(#paytool_provider_UnwrappedPaymentTool{
+    payment_data = {card, #paytool_provider_Card{}}
 }) ->
     #cds_SessionData{
         auth_data =

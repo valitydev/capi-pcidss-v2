@@ -3,7 +3,8 @@
 -include_lib("common_test/include/ct.hrl").
 -include_lib("capi_dummy_data.hrl").
 -include_lib("capi_token_keeper_data.hrl").
--include_lib("damsel/include/dmsl_domain_config_thrift.hrl").
+-include_lib("damsel/include/dmsl_domain_thrift.hrl").
+-include_lib("damsel/include/dmsl_domain_conf_thrift.hrl").
 
 -export([init_suite/2]).
 -export([init_suite/3]).
@@ -70,9 +71,9 @@ init_suite(Module, Config, CapiEnv) ->
         [
             {
                 'Repository',
-                {dmsl_domain_config_thrift, 'Repository'},
+                {dmsl_domain_conf_thrift, 'Repository'},
                 fun('Checkout', _) ->
-                    {ok, #'Snapshot'{
+                    {ok, #domain_conf_Snapshot{
                         version = 1,
                         domain = #{
                             ?PAYMENT_SYSTEM_REF(<<"VISA">>) =>

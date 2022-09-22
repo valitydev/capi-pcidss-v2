@@ -3,8 +3,8 @@
 -include_lib("common_test/include/ct.hrl").
 -include_lib("stdlib/include/assert.hrl").
 
--include_lib("damsel/include/dmsl_payment_processing_thrift.hrl").
--include_lib("damsel/include/dmsl_payment_tool_provider_thrift.hrl").
+-include_lib("damsel/include/dmsl_domain_thrift.hrl").
+-include_lib("damsel/include/dmsl_paytool_provider_thrift.hrl").
 -include_lib("bouncer_proto/include/bouncer_rstn_thrift.hrl").
 -include_lib("binbase_proto/include/binbase_binbase_thrift.hrl").
 -include_lib("cds_proto/include/cds_proto_storage_thrift.hrl").
@@ -777,9 +777,9 @@ create_googlepay_plain_payment_resource_ok_test(Config) ->
                 {ok,
                     ?UNWRAPPED_PAYMENT_TOOL(
                         ?GOOGLE_PAY_DETAILS,
-                        {card, #paytoolprv_Card{
+                        {card, #paytool_provider_Card{
                             pan = <<"5321301234567892">>,
-                            exp_date = #paytoolprv_ExpDate{month = 10, year = 2028}
+                            exp_date = #paytool_provider_ExpDate{month = 10, year = 2028}
                         }}
                     )}
             end},
