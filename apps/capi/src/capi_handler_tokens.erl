@@ -79,18 +79,24 @@ prepare_replacement_ip(_) ->
 process_request('CreatePaymentResource', Req, Context, Resolution) ->
     Params = maps:get('PaymentResourceParams', Req),
     ClientInfo0 = maps:get(<<"clientInfo">>, Params),
-    ClientIP =
+    PeerIP = prepare_requester_ip(Context),
+    {ClientIP, UserIP} =
         case flatten_resolution_decision(Resolution) of
             {restricted, ip_replacement_forbidden} ->
-                prepare_requester_ip(Context);
+                {PeerIP, undefined};
             allowed ->
                 case get_replacement_ip(ClientInfo0) of
-                    undefined -> prepare_requester_ip(Context);
-                    IP -> IP
+                    undefined -> {PeerIP, undefined};
+                    IP -> {IP, IP}
                 end
         end,
 
-    ClientInfo1 = maps:put(<<"ip">>, ClientIP, ClientInfo0),
+    ClientInfo1 = ClientInfo0#{
+        <<"ip">> => ClientIP,
+        <<"peer_ip">> => PeerIP,
+        <<"user_ip">> => UserIP
+    },
+
     try
         ClientUrl = get_client_url(ClientInfo1),
         ClientInfo = maps:put(<<"url">>, ClientUrl, ClientInfo1),
@@ -148,8 +154,34 @@ prepare_requester_ip(Context) ->
     #{ip_address := IP} = get_peer_info(Context),
     genlib:to_binary(inet:ntoa(IP)).
 
-get_peer_info(#{swagger_context := #{peer := Peer}}) ->
-    Peer.
+get_peer_info(#{swagger_context := #{cowboy_req := Req}}) ->
+    {ok, IP} = determine_peer(Req),
+    IP.
+
+determine_peer(Req) ->
+    Peer = cowboy_req:peer(Req),
+    Value = cowboy_req:header(<<"x-forwarded-for">>, Req),
+    determine_peer_from_header(Value, Peer).
+
+determine_peer_from_header(undefined, {IP, Port}) ->
+    % undefined, assuming no proxies were involved
+    {ok, #{ip_address => IP, port_number => Port}};
+determine_peer_from_header(Value, _Peer) when is_binary(Value) ->
+    ClientPeer = string:strip(binary_to_list(Value)),
+    case string:tokens(ClientPeer, ", ") of
+        [ClientIP | _Proxies] ->
+            case inet:parse_strict_address(ClientIP) of
+                {ok, IP} ->
+                    % ok
+                    {ok, #{ip_address => IP}};
+                Error ->
+                    % unparseable ip address
+                    Error
+            end;
+        _ ->
+            % empty or malformed value
+            {error, malformed}
+    end.
 
 get_replacement_ip(ClientInfo) ->
     maps:get(<<"ip">>, ClientInfo, undefined).

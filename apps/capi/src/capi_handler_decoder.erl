@@ -102,6 +102,8 @@ decode_client_info(ClientInfo) ->
     genlib_map:compact(#{
         <<"fingerprint">> => ClientInfo#domain_ClientInfo.fingerprint,
         <<"ip">> => ClientInfo#domain_ClientInfo.ip_address,
+        <<"peer_ip">> => ClientInfo#domain_ClientInfo.peer_ip_address,
+        <<"user_ip">> => ClientInfo#domain_ClientInfo.user_ip_address,
         <<"url">> => ClientInfo#domain_ClientInfo.url
     }).
 

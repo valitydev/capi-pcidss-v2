@@ -890,7 +890,8 @@ ip_replacement_allowed_test(Config) ->
         },
         <<"clientInfo">> => ClientInfo
     }),
-    ?assertEqual(ClientIP, maps:get(<<"ip">>, maps:get(<<"clientInfo">>, Res))).
+    ?assertEqual(ClientIP, maps:get(<<"ip">>, maps:get(<<"clientInfo">>, Res))),
+    ?assertEqual(ClientIP, maps:get(<<"user_ip">>, maps:get(<<"clientInfo">>, Res))).
 
 -spec ip_replacement_restricted_test(_) -> _.
 ip_replacement_restricted_test(Config) ->
@@ -904,12 +905,8 @@ ip_replacement_restricted_test(Config) ->
         },
         <<"clientInfo">> => ClientInfo
     }),
-    case maps:get(<<"ip">>, maps:get(<<"clientInfo">>, Res)) of
-        ClientIP ->
-            error("unathorized ip replacement");
-        _ ->
-            ok
-    end.
+    PeerIP = maps:get(<<"peer_ip">>, maps:get(<<"clientInfo">>, Res)),
+    ?assertEqual(PeerIP, maps:get(<<"ip">>, maps:get(<<"clientInfo">>, Res))).
 %%
 
 -spec authorization_positive_lifetime_ok_test(config()) -> _.
