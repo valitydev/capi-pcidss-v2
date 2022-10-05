@@ -155,32 +155,13 @@ prepare_requester_ip(Context) ->
     genlib:to_binary(inet:ntoa(IP)).
 
 get_peer_info(#{swagger_context := #{cowboy_req := Req}}) ->
-    {ok, IP} = determine_peer(Req),
-    IP.
-
-determine_peer(Req) ->
     Peer = cowboy_req:peer(Req),
     Value = cowboy_req:header(<<"x-forwarded-for">>, Req),
-    determine_peer_from_header(Value, Peer).
-
-determine_peer_from_header(undefined, {IP, Port}) ->
-    % undefined, assuming no proxies were involved
-    {ok, #{ip_address => IP, port_number => Port}};
-determine_peer_from_header(Value, _Peer) when is_binary(Value) ->
-    ClientPeer = string:strip(binary_to_list(Value)),
-    case string:tokens(ClientPeer, ", ") of
-        [ClientIP | _Proxies] ->
-            case inet:parse_strict_address(ClientIP) of
-                {ok, IP} ->
-                    % ok
-                    {ok, #{ip_address => IP}};
-                Error ->
-                    % unparseable ip address
-                    Error
-            end;
+    case capi_handler_utils:determine_peer_from_header(Value, Peer) of
+        {ok, IP} ->
+            IP;
         _ ->
-            % empty or malformed value
-            {error, malformed}
+            throw({ok, logic_error(invalidRequest, <<"Peer ip is invalid">>)})
     end.
 
 get_replacement_ip(ClientInfo) ->
