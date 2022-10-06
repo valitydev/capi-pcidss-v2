@@ -113,11 +113,12 @@ determine_peer_from_header(undefined, {IP, Port}) ->
     {ok, #{ip_address => IP, port_number => Port}};
 determine_peer_from_header(Value, _Peer) when is_binary(Value) ->
     ClientPeer = string:strip(binary_to_list(Value)),
-    case string:lexemes(ClientPeer, ",") of
-        [ClientIP | _Proxies] ->
+    Ips = string:lexemes(ClientPeer, ","),
+    case lists:all(fun check_ip/1, Ips) of
+        true when length(Ips) > 0 ->
+            [ClientIP | _Proxies] = Ips,
             case inet:parse_strict_address(ClientIP) of
                 {ok, IP} ->
-                    % ok
                     {ok, #{ip_address => IP}};
                 Error ->
                     % unparseable ip address
@@ -126,6 +127,15 @@ determine_peer_from_header(Value, _Peer) when is_binary(Value) ->
         _ ->
             % empty or malformed value
             {error, malformed}
+    end.
+
+check_ip(IP) ->
+    case inet:parse_strict_address(IP) of
+        {ok, _} ->
+            true;
+        _Error ->
+            % unparseable ip address
+            false
     end.
 
 %%
@@ -147,11 +157,11 @@ determine_peer_test_() ->
             determine_peer_from_header(<<",,,,">>, {{1, 1, 1, 1}, 1})
         ),
         ?_assertEqual(
-            {ok, #{ip_address => {1, 1, 1, 1}}},
+            {error, malformed},
             determine_peer_from_header(<<"1.1.1.1,,, ,,,">>, {{1, 1, 1, 1}, 1})
         ),
         ?_assertEqual(
-            {error, einval},
+            {error, malformed},
             determine_peer_from_header(<<"1.,1.,1.1,">>, {{1, 1, 1, 1}, 1})
         ),
         ?_assertEqual(
