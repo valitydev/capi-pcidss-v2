@@ -15,7 +15,6 @@
 -export([wrap_payment_session/2]).
 
 -export([determine_peer/1]).
--export([determine_peer_from_header/2]).
 
 -type processing_context() :: capi_handler:processing_context().
 -type response() :: capi_handler:response().
@@ -113,17 +112,12 @@ determine_peer_from_header(undefined, {IP, Port}) ->
     {ok, #{ip_address => IP, port_number => Port}};
 determine_peer_from_header(Value, _Peer) when is_binary(Value) ->
     ClientPeer = string:strip(binary_to_list(Value)),
-    Ips = string:lexemes(ClientPeer, ","),
-    case lists:all(fun check_ip/1, Ips) of
-        true when length(Ips) > 0 ->
-            [ClientIP | _Proxies] = Ips,
-            case inet:parse_strict_address(ClientIP) of
-                {ok, IP} ->
-                    {ok, #{ip_address => IP}};
-                Error ->
-                    % unparseable ip address
-                    Error
-            end;
+    IPs = [string:trim(L, both, " ") || L <- string:lexemes(ClientPeer, ",")],
+    Valid = lists:all(fun check_ip/1, IPs),
+    case IPs of
+        [ClientIP | _Proxies] when Valid ->
+            {ok, IP} = inet:parse_strict_address(ClientIP),
+            {ok, #{ip_address => IP}};
         _ ->
             % empty or malformed value
             {error, malformed}
