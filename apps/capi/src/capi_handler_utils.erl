@@ -14,6 +14,7 @@
 
 -export([wrap_payment_session/2]).
 
+-export([determine_peer/1]).
 -export([determine_peer_from_header/2]).
 
 -type processing_context() :: capi_handler:processing_context().
@@ -95,6 +96,15 @@ wrap_payment_session(ClientInfo, PaymentSession) ->
         <<"paymentSession">> => PaymentSession
     }).
 
+-spec determine_peer(cowboy_req:req()) ->
+    {ok, #{ip_address := inet:ip_address(), port_number => inet:port_number()}}
+    | {error, einval | malformed}.
+
+determine_peer(Req) ->
+    Peer = cowboy_req:peer(Req),
+    Value = cowboy_req:header(<<"x-forwarded-for">>, Req),
+    determine_peer_from_header(Value, Peer).
+
 -spec determine_peer_from_header(undefined | binary(), {inet:ip_address(), inet:port_number()}) ->
     {ok, #{ip_address := inet:ip_address(), port_number => inet:port_number()}}
     | {error, einval | malformed}.
@@ -103,7 +113,7 @@ determine_peer_from_header(undefined, {IP, Port}) ->
     {ok, #{ip_address => IP, port_number => Port}};
 determine_peer_from_header(Value, _Peer) when is_binary(Value) ->
     ClientPeer = string:strip(binary_to_list(Value)),
-    case string:lexemes(ClientPeer, ", ") of
+    case string:lexemes(ClientPeer, ",") of
         [ClientIP | _Proxies] ->
             case inet:parse_strict_address(ClientIP) of
                 {ok, IP} ->
@@ -135,6 +145,14 @@ determine_peer_test_() ->
         ?_assertEqual(
             {error, malformed},
             determine_peer_from_header(<<",,,,">>, {{1, 1, 1, 1}, 1})
+        ),
+        ?_assertEqual(
+            {ok, #{ip_address => {1, 1, 1, 1}}},
+            determine_peer_from_header(<<"1.1.1.1,,, ,,,">>, {{1, 1, 1, 1}, 1})
+        ),
+        ?_assertEqual(
+            {error, einval},
+            determine_peer_from_header(<<"1.,1.,1.1,">>, {{1, 1, 1, 1}, 1})
         ),
         ?_assertEqual(
             {ok, #{ip_address => {17, 71, 0, 1}}},

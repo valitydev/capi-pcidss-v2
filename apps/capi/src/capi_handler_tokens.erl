@@ -155,13 +155,11 @@ prepare_requester_ip(Context) ->
     genlib:to_binary(inet:ntoa(IP)).
 
 get_peer_info(#{swagger_context := #{cowboy_req := Req}}) ->
-    Peer = cowboy_req:peer(Req),
-    Value = cowboy_req:header(<<"x-forwarded-for">>, Req),
-    case capi_handler_utils:determine_peer_from_header(Value, Peer) of
+    case capi_handler_utils:determine_peer(Req) of
         {ok, IP} ->
             IP;
         _ ->
-            throw({ok, logic_error(invalidRequest, <<"Peer ip is invalid">>)})
+            throw({ok, logic_error(invalidRequest, <<"Malformed 'x-forwarded-for' header">>)})
     end.
 
 get_replacement_ip(ClientInfo) ->
