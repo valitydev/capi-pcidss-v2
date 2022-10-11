@@ -82,12 +82,12 @@ mask_phone_number(PhoneNumber) ->
 ) -> decode_data().
 decode_disposable_payment_resource(Resource, EncryptedToken, TokenValidUntil) ->
     #domain_DisposablePaymentResource{payment_tool = PaymentTool, payment_session_id = SessionID} = Resource,
-    ClientInfo = decode_client_info(Resource#domain_DisposablePaymentResource.client_info),
+    ClientInfo = Resource#domain_DisposablePaymentResource.client_info,
     genlib_map:compact(#{
         <<"paymentToolToken">> => EncryptedToken,
-        <<"paymentSession">> => capi_handler_utils:wrap_payment_session(ClientInfo, SessionID),
+        <<"paymentSession">> => capi_handler_utils:wrap_payment_session(decode_client_info_ext(ClientInfo), SessionID),
         <<"paymentToolDetails">> => decode_payment_tool_details(PaymentTool),
-        <<"clientInfo">> => ClientInfo,
+        <<"clientInfo">> => decode_client_info(ClientInfo),
         <<"validUntil">> => decode_deadline(TokenValidUntil)
     }).
 
@@ -101,7 +101,18 @@ decode_client_info(undefined) ->
 decode_client_info(ClientInfo) ->
     genlib_map:compact(#{
         <<"fingerprint">> => ClientInfo#domain_ClientInfo.fingerprint,
+        <<"ip">> => ClientInfo#domain_ClientInfo.user_ip_address,
+        <<"url">> => ClientInfo#domain_ClientInfo.url
+    }).
+
+decode_client_info_ext(undefined) ->
+    undefined;
+decode_client_info_ext(ClientInfo) ->
+    genlib_map:compact(#{
+        <<"fingerprint">> => ClientInfo#domain_ClientInfo.fingerprint,
         <<"ip">> => ClientInfo#domain_ClientInfo.ip_address,
+        <<"peer_ip">> => ClientInfo#domain_ClientInfo.peer_ip_address,
+        <<"user_ip">> => ClientInfo#domain_ClientInfo.user_ip_address,
         <<"url">> => ClientInfo#domain_ClientInfo.url
     }).
 

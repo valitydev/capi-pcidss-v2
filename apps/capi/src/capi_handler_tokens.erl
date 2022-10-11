@@ -79,18 +79,24 @@ prepare_replacement_ip(_) ->
 process_request('CreatePaymentResource', Req, Context, Resolution) ->
     Params = maps:get('PaymentResourceParams', Req),
     ClientInfo0 = maps:get(<<"clientInfo">>, Params),
-    ClientIP =
+    PeerIP = prepare_requester_ip(Context),
+    {ClientIP, UserIP} =
         case flatten_resolution_decision(Resolution) of
             {restricted, ip_replacement_forbidden} ->
-                prepare_requester_ip(Context);
+                {PeerIP, undefined};
             allowed ->
                 case get_replacement_ip(ClientInfo0) of
-                    undefined -> prepare_requester_ip(Context);
-                    IP -> IP
+                    undefined -> {PeerIP, undefined};
+                    IP -> {IP, IP}
                 end
         end,
 
-    ClientInfo1 = maps:put(<<"ip">>, ClientIP, ClientInfo0),
+    ClientInfo1 = ClientInfo0#{
+        <<"ip">> => ClientIP,
+        <<"peer_ip">> => PeerIP,
+        <<"user_ip">> => UserIP
+    },
+
     try
         ClientUrl = get_client_url(ClientInfo1),
         ClientInfo = maps:put(<<"url">>, ClientUrl, ClientInfo1),
@@ -148,8 +154,13 @@ prepare_requester_ip(Context) ->
     #{ip_address := IP} = get_peer_info(Context),
     genlib:to_binary(inet:ntoa(IP)).
 
-get_peer_info(#{swagger_context := #{peer := Peer}}) ->
-    Peer.
+get_peer_info(#{swagger_context := #{cowboy_req := Req}}) ->
+    case capi_handler_utils:determine_peer(Req) of
+        {ok, IP} ->
+            IP;
+        _ ->
+            throw({ok, logic_error(invalidRequest, <<"Malformed 'x-forwarded-for' header">>)})
+    end.
 
 get_replacement_ip(ClientInfo) ->
     maps:get(<<"ip">>, ClientInfo, undefined).

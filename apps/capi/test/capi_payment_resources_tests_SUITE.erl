@@ -890,7 +890,10 @@ ip_replacement_allowed_test(Config) ->
         },
         <<"clientInfo">> => ClientInfo
     }),
-    ?assertEqual(ClientIP, maps:get(<<"ip">>, maps:get(<<"clientInfo">>, Res))).
+
+    PaymentSession = capi_utils:base64url_to_map(maps:get(<<"paymentSession">>, Res)),
+    ?assertEqual(ClientIP, maps:get(<<"ip">>, maps:get(<<"clientInfo">>, Res))),
+    ?assertEqual(ClientIP, maps:get(<<"user_ip">>, maps:get(<<"clientInfo">>, PaymentSession))).
 
 -spec ip_replacement_restricted_test(_) -> _.
 ip_replacement_restricted_test(Config) ->
@@ -904,12 +907,9 @@ ip_replacement_restricted_test(Config) ->
         },
         <<"clientInfo">> => ClientInfo
     }),
-    case maps:get(<<"ip">>, maps:get(<<"clientInfo">>, Res)) of
-        ClientIP ->
-            error("unathorized ip replacement");
-        _ ->
-            ok
-    end.
+    PaymentSession = capi_utils:base64url_to_map(maps:get(<<"paymentSession">>, Res)),
+    <<"::ffff:127.0.0.1">> = maps:get(<<"peer_ip">>, maps:get(<<"clientInfo">>, PaymentSession)).
+
 %%
 
 -spec authorization_positive_lifetime_ok_test(config()) -> _.

@@ -17,6 +17,8 @@ encode_client_info(ClientInfo) ->
     #domain_ClientInfo{
         fingerprint = maps:get(<<"fingerprint">>, ClientInfo),
         ip_address = maps:get(<<"ip">>, ClientInfo),
+        peer_ip_address = maps:get(<<"peer_ip">>, ClientInfo),
+        user_ip_address = maps:get(<<"user_ip">>, ClientInfo),
         url = maps:get(<<"url">>, ClientInfo, undefined)
     }.
 

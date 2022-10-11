@@ -14,6 +14,8 @@
 
 -export([wrap_payment_session/2]).
 
+-export([determine_peer/1]).
+
 -type processing_context() :: capi_handler:processing_context().
 -type response() :: capi_handler:response().
 
@@ -92,3 +94,74 @@ wrap_payment_session(ClientInfo, PaymentSession) ->
         <<"clientInfo">> => ClientInfo,
         <<"paymentSession">> => PaymentSession
     }).
+
+-spec determine_peer(cowboy_req:req()) ->
+    {ok, #{ip_address := inet:ip_address(), port_number => inet:port_number()}}
+    | {error, einval | malformed}.
+
+determine_peer(Req) ->
+    Peer = cowboy_req:peer(Req),
+    Value = cowboy_req:header(<<"x-forwarded-for">>, Req),
+    determine_peer_from_header(Value, Peer).
+
+-spec determine_peer_from_header(undefined | binary(), {inet:ip_address(), inet:port_number()}) ->
+    {ok, #{ip_address := inet:ip_address(), port_number => inet:port_number()}}
+    | {error, einval | malformed}.
+determine_peer_from_header(undefined, {IP, Port}) ->
+    % undefined, assuming no proxies were involved
+    {ok, #{ip_address => IP, port_number => Port}};
+determine_peer_from_header(Value, _Peer) when is_binary(Value) ->
+    ClientPeer = string:strip(binary_to_list(Value)),
+    IPs = [string:trim(L, both, " ") || L <- string:lexemes(ClientPeer, ",")],
+    Valid = lists:all(fun check_ip/1, IPs),
+    case IPs of
+        [ClientIP | _Proxies] when Valid ->
+            {ok, IP} = inet:parse_strict_address(ClientIP),
+            {ok, #{ip_address => IP}};
+        _ ->
+            % empty or malformed value
+            {error, malformed}
+    end.
+
+check_ip(IP) ->
+    case inet:parse_strict_address(IP) of
+        {ok, _} ->
+            true;
+        _Error ->
+            % unparseable ip address
+            false
+    end.
+
+%%
+
+-ifdef(TEST).
+-include_lib("eunit/include/eunit.hrl").
+
+-spec test() -> _.
+
+-spec determine_peer_test_() -> [_TestGen].
+determine_peer_test_() ->
+    [
+        ?_assertEqual(
+            {ok, #{ip_address => {10, 10, 10, 10}}},
+            determine_peer_from_header(<<"10.10.10.10">>, {{1, 1, 1, 1}, 1})
+        ),
+        ?_assertEqual(
+            {error, malformed},
+            determine_peer_from_header(<<",,,,">>, {{1, 1, 1, 1}, 1})
+        ),
+        ?_assertEqual(
+            {error, malformed},
+            determine_peer_from_header(<<"1.1.1.1,,, ,,,">>, {{1, 1, 1, 1}, 1})
+        ),
+        ?_assertEqual(
+            {error, malformed},
+            determine_peer_from_header(<<"1.,1.,1.1,">>, {{1, 1, 1, 1}, 1})
+        ),
+        ?_assertEqual(
+            {ok, #{ip_address => {17, 71, 0, 1}}},
+            determine_peer_from_header(<<"17.71.0.1">>, {{1, 1, 1, 1}, 1})
+        )
+    ].
+
+-endif.
