@@ -101,7 +101,8 @@ wrap_payment_session(ClientInfo, PaymentSession) ->
 
 determine_peer(Req) ->
     Peer = cowboy_req:peer(Req),
-    Value = cowboy_req:header(<<"x-forwarded-for">>, Req),
+    IPAddressHeader = genlib_app:env(capi_pcidss, ip_address_header, <<"x-forwarded-for">>),
+    Value = cowboy_req:header(IPAddressHeader, Req),
     determine_peer_from_header(Value, Peer).
 
 -spec determine_peer_from_header(undefined | binary(), {inet:ip_address(), inet:port_number()}) ->

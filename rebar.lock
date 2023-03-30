@@ -115,7 +115,7 @@
   0},
  {<<"swag_server">>,
   {git,"https://github.com/valitydev/swag-payments.git",
-       {ref,"41747e0fe3758299b7865f099f4bfe8a91166c13"}},
+       {ref,"5e355455f1a2cb0735d1ceead4e981712ebe4a92"}},
   0},
  {<<"tds_proto">>,
   {git,"https://github.com/valitydev/tds-proto.git",
