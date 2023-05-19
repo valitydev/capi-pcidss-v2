@@ -96,6 +96,7 @@ process_request('CreatePaymentResource', Req, Context, Resolution) ->
         <<"peer_ip">> => PeerIP,
         <<"user_ip">> => UserIP
     },
+    _ = logger:info("Got client info ~p", [ClientInfo1]),
 
     try
         ClientUrl = get_client_url(ClientInfo1),
