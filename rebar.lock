@@ -13,7 +13,7 @@
   0},
  {<<"bouncer_proto">>,
   {git,"https://github.com/valitydev/bouncer-proto.git",
-       {ref,"5628c61f5ef27aa2415bb8b4a0234f20ed875644"}},
+       {ref,"23d1761355d76923ee0f2797f106e9fb6ecf06c1"}},
   0},
  {<<"cache">>,{pkg,<<"cache">>,<<"2.3.3">>},1},
  {<<"cds_proto">>,
