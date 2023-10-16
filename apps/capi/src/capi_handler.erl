@@ -1,5 +1,8 @@
 -module(capi_handler).
 
+-include_lib("opentelemetry_api/include/otel_tracer.hrl").
+-include_lib("opentelemetry_api/include/opentelemetry.hrl").
+
 -behaviour(swag_server_logic_handler).
 
 -type error_type() :: swag_server_logic_handler:error_type().
@@ -93,10 +96,13 @@ get_handlers() ->
     HandlerOpts :: handler_opts()
 ) -> {ok | error, response()}.
 handle_request(OperationID, Req, SwagContext, HandlerOpts) ->
-    scoper:scope(
-        ?SWAG_HANDLER_SCOPE,
-        fun() -> handle_function_(OperationID, Req, SwagContext, HandlerOpts) end
-    ).
+    SpanName = <<"server ", (atom_to_binary(OperationID))/binary>>,
+    ?with_span(SpanName, #{kind => ?SPAN_KIND_SERVER}, fun(_SpanCtx) ->
+        scoper:scope(
+            ?SWAG_HANDLER_SCOPE,
+            fun() -> handle_function_(OperationID, Req, SwagContext, HandlerOpts) end
+        )
+    end).
 
 handle_function_(OperationID, Req, SwagContext0, _HandlerOpts) ->
     try
@@ -111,6 +117,7 @@ handle_function_(OperationID, Req, SwagContext0, _HandlerOpts) ->
 
         Context = create_processing_context(OperationID, SwagContext, WoodyContext),
         ok = set_context_meta(Context),
+        ok = sync_scoper_otel_meta(),
         {ok, RequestState} = prepare(OperationID, Req, Context, get_handlers()),
         #{authorize := Authorize, process := Process} = RequestState,
         {ok, Resolution} = Authorize(),
@@ -249,6 +256,11 @@ set_context_meta(Context) ->
         }
     },
     scoper:add_meta(Meta).
+
+-spec sync_scoper_otel_meta() -> ok.
+sync_scoper_otel_meta() ->
+    _ = otel_span:set_attributes(otel_tracer:current_span_ctx(), genlib_map:flatten_join($., scoper:collect())),
+    ok.
 
 -spec set_request_meta(operation_id(), request_data()) -> ok.
 set_request_meta(OperationID, Req) ->
