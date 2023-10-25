@@ -56,11 +56,12 @@
 
 -spec authorize_api_key(operation_id(), swag_server:api_key(), request_context(), handler_opts()) ->
     Result :: false | {true, capi_auth:preauth_context()}.
-authorize_api_key(OperationID, ApiKey, _Context, _HandlerOpts) ->
+authorize_api_key(OperationID, ApiKey, Context, _HandlerOpts) ->
+    ok = set_otel_context(Context),
     %% No actual authorization here: see capi_v2.capi_handler for details
     case capi_auth:preauthorize_api_key(ApiKey) of
-        {ok, Context} ->
-            {true, Context};
+        {ok, Context1} ->
+            {true, Context1};
         {error, Error} ->
             _ = logger:info("API Key preauthorization failed for ~p due to ~p", [OperationID, Error]),
             false
@@ -117,7 +118,6 @@ handle_function_(OperationID, Req, SwagContext0, _HandlerOpts) ->
 
         Context = create_processing_context(OperationID, SwagContext, WoodyContext),
         ok = set_context_meta(Context),
-        ok = sync_scoper_otel_meta(),
         {ok, RequestState} = prepare(OperationID, Req, Context, get_handlers()),
         #{authorize := Authorize, process := Process} = RequestState,
         {ok, Resolution} = Authorize(),
@@ -244,6 +244,14 @@ process_general_error(Class, Reason, Stacktrace, OperationID, Req, SwagContext) 
     ),
     {error, server_error(500)}.
 
+set_otel_context(#{cowboy_req := Req}) ->
+    Headers = cowboy_req:headers(Req),
+    %% Implicitly puts OTEL context into process dictionary.
+    %% Since cowboy does not reuse process for other requests, we don't care
+    %% about cleaning it up.
+    _OtelCtx = otel_propagator_text_map:extract(maps:to_list(Headers)),
+    ok.
+
 -spec set_context_meta(processing_context()) -> ok.
 set_context_meta(Context) ->
     AuthContext = capi_handler_utils:get_auth_context(Context),
@@ -256,11 +264,6 @@ set_context_meta(Context) ->
         }
     },
     scoper:add_meta(Meta).
-
--spec sync_scoper_otel_meta() -> ok.
-sync_scoper_otel_meta() ->
-    _ = otel_span:set_attributes(otel_tracer:current_span_ctx(), genlib_map:flatten_join($., scoper:collect())),
-    ok.
 
 -spec set_request_meta(operation_id(), request_data()) -> ok.
 set_request_meta(OperationID, Req) ->

@@ -19,7 +19,7 @@ call_service(ServiceName, Function, Args, Context0) ->
     Context1 = set_deadline(Deadline, Context0),
     Retry = get_service_retry(ServiceName, Function),
     EventHandlerOpts = genlib_app:env(capi_pcidss, scoper_event_handler_options, #{}),
-    EventHandler = {capi_woody_event_handler, EventHandlerOpts},
+    EventHandler = {scoper_woody_event_handler, EventHandlerOpts},
     call_service(ServiceName, Function, Args, Context1, EventHandler, Retry).
 
 call_service(ServiceName, Function, Args, Context, EventHandler, Retry) ->
