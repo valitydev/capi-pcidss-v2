@@ -9,6 +9,7 @@
         damsel,
         woody,
         scoper,
-        cds_proto
+        cds_proto,
+        opentelemetry_api
     ]}
 ]}.
