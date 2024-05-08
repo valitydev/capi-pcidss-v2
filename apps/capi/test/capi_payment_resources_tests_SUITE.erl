@@ -227,7 +227,8 @@ create_visa_payment_resource_ok_test(Config) ->
             <<"last4">> := <<"1111">>,
             <<"first6">> := <<"411111">>,
             <<"cardNumberMask">> := <<"411111******1111">>
-        }
+        },
+        <<"resourceToken">> := <<_H:1/binary, _T/binary>>
     }} = capi_client_tokens:create_payment_resource(?config(context, Config), #{
         <<"paymentTool">> => #{
             <<"paymentToolType">> => <<"CardData">>,
@@ -378,7 +379,9 @@ create_payment_resource_invalid_cardholder_test(Config) ->
         Config
     ),
     PaymentTool = ?SWAG_BANK_CARD(<<"4111111111111111">>),
-    {ok, _} = capi_client_tokens:create_payment_resource(
+    {ok, #{
+        <<"resourceToken">> := <<_H:1/binary, _T/binary>>
+    }} = capi_client_tokens:create_payment_resource(
         ?config(context, Config),
         #{
             <<"paymentTool">> => PaymentTool#{<<"cardHolder">> => <<"Вася Иванов"/utf8>>},
@@ -428,7 +431,8 @@ create_visa_with_empty_cvc_ok_test(Config) ->
             <<"last4">> := <<"1111">>,
             <<"first6">> := <<"411111">>,
             <<"cardNumberMask">> := <<"411111******1111">>
-        }
+        },
+        <<"resourceToken">> := <<_H:1/binary, _T/binary>>
     }} = capi_client_tokens:create_payment_resource(?config(context, Config), #{
         <<"paymentTool">> => #{
             <<"paymentToolType">> => <<"CardData">>,
@@ -517,7 +521,8 @@ create_nspkmir_payment_resource_ok_test(Config) ->
             <<"cardNumberMask">> := <<"220220******8454">>,
             <<"last4">> := <<"8454">>,
             <<"first6">> := <<"220220">>
-        }
+        },
+        <<"resourceToken">> := <<_H:1/binary, _T/binary>>
     }} = capi_client_tokens:create_payment_resource(?config(context, Config), #{
         <<"paymentTool">> => #{
             <<"paymentToolType">> => <<"CardData">>,
@@ -536,7 +541,8 @@ create_euroset_payment_resource_ok_test(Config) ->
         <<"paymentToolDetails">> := #{
             <<"detailsType">> := <<"PaymentToolDetailsPaymentTerminal">>,
             <<"provider">> := <<"euroset">>
-        }
+        },
+        <<"resourceToken">> := <<_H:1/binary, _T/binary>>
     }} = capi_client_tokens:create_payment_resource(?config(context, Config), #{
         <<"paymentTool">> => #{
             <<"paymentToolType">> => <<"PaymentTerminalData">>,
@@ -556,7 +562,8 @@ create_euroset_no_metadata_payment_resource_ok_test(Config) ->
         <<"paymentToolDetails">> := #{
             <<"detailsType">> := <<"PaymentToolDetailsPaymentTerminal">>,
             <<"provider">> := <<"euroset">>
-        }
+        },
+        <<"resourceToken">> := <<_H:1/binary, _T/binary>>
     }} = capi_client_tokens:create_payment_resource(?config(context, Config), #{
         <<"paymentTool">> => #{
             <<"paymentToolType">> => <<"PaymentTerminalData">>,
@@ -610,7 +617,8 @@ create_qw_payment_resource_ok_test(Config) ->
         <<"paymentToolDetails">> := #{
             <<"detailsType">> := <<"PaymentToolDetailsDigitalWallet">>,
             <<"provider">> := <<"qiwi">>
-        }
+        },
+        <<"resourceToken">> := <<_H:1/binary, _T/binary>>
     }} = capi_client_tokens:create_payment_resource(?config(context, Config), #{
         <<"paymentTool">> => #{
             <<"paymentToolType">> => <<"DigitalWalletData">>,
@@ -648,9 +656,16 @@ create_qw_payment_resource_with_access_token_generates_different_payment_token(C
     },
     Result0 = capi_client_tokens:create_payment_resource(?config(context, Config), PaymentParams0),
     Result1 = capi_client_tokens:create_payment_resource(?config(context, Config), PaymentParams1),
-    {ok, #{<<"paymentToolToken">> := Token0}} = Result0,
-    {ok, #{<<"paymentToolToken">> := Token1}} = Result1,
-    ?assertNotEqual(Token0, Token1).
+    {ok, #{
+        <<"paymentToolToken">> := Token0,
+        <<"resourceToken">> := ResourceToken0
+    }} = Result0,
+    {ok, #{
+        <<"paymentToolToken">> := Token1,
+        <<"resourceToken">> := ResourceToken1
+    }} = Result1,
+    ?assertNotEqual(Token0, Token1),
+    ?assertNotEqual(ResourceToken0, ResourceToken1).
 
 -spec create_nonexistent_provider_payment_resource_fails_test(_) -> _.
 create_nonexistent_provider_payment_resource_fails_test(Config) ->
@@ -705,7 +720,8 @@ create_applepay_tokenized_payment_resource_ok_test(Config) ->
             <<"tokenProvider">> := <<"APPLE PAY">>,
             <<"cardNumberMask">> := <<"************7892">>,
             <<"last4">> := <<"7892">>
-        }
+        },
+        <<"resourceToken">> := <<_H:1/binary, _T/binary>>
     }} =
         capi_client_tokens:create_payment_resource(?config(context, Config), #{
             <<"paymentTool">> => #{
@@ -749,7 +765,8 @@ create_googlepay_tokenized_payment_resource_ok_test(Config) ->
             <<"tokenProvider">> := <<"GOOGLE PAY">>,
             <<"cardNumberMask">> := <<"************7892">>,
             <<"last4">> := <<"7892">>
-        }
+        },
+        <<"resourceToken">> := <<_H:1/binary, _T/binary>>
     }} =
         capi_client_tokens:create_payment_resource(?config(context, Config), #{
             <<"paymentTool">> => #{
@@ -800,7 +817,8 @@ create_googlepay_plain_payment_resource_ok_test(Config) ->
             <<"cardNumberMask">> := <<"532130******7892">>,
             <<"first6">> := <<"532130">>,
             <<"last4">> := <<"7892">>
-        }
+        },
+        <<"resourceToken">> := <<_H:1/binary, _T/binary>>
     }} =
         capi_client_tokens:create_payment_resource(?config(context, Config), #{
             <<"paymentTool">> => #{
@@ -847,7 +865,8 @@ create_yandexpay_tokenized_payment_resource_ok_test(Config) ->
             <<"tokenProvider">> := <<"YANDEX PAY">>,
             <<"cardNumberMask">> := <<"************7892">>,
             <<"last4">> := <<"7892">>
-        }
+        },
+        <<"resourceToken">> := <<_H:1/binary, _T/binary>>
     }} =
         capi_client_tokens:create_payment_resource(?config(context, Config), #{
             <<"paymentTool">> => #{
@@ -1004,7 +1023,8 @@ authorization_error_wrong_token_type_test(_Config) ->
 payment_token_valid_until_test(Config) ->
     {ok, #{
         <<"paymentToolToken">> := PaymentToolToken,
-        <<"validUntil">> := ValidUntil
+        <<"validUntil">> := ValidUntil,
+        <<"resourceToken">> := <<_H:1/binary, _T/binary>>
     }} = capi_client_tokens:create_payment_resource(?config(context, Config), #{
         <<"paymentTool">> => #{
             <<"paymentToolType">> => <<"CryptoWalletData">>,

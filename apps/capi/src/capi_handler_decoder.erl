@@ -2,7 +2,7 @@
 
 -include_lib("damsel/include/dmsl_domain_thrift.hrl").
 
--export([decode_disposable_payment_resource/3]).
+-export([decode_disposable_payment_resource/4]).
 
 -export([decode_last_digits/1]).
 -export([decode_masked_pan/2]).
@@ -78,13 +78,15 @@ mask_phone_number(PhoneNumber) ->
 -spec decode_disposable_payment_resource(
     capi_handler_encoder:encode_data(),
     encrypted_token(),
+    encrypted_token(),
     capi_utils:deadline()
 ) -> decode_data().
-decode_disposable_payment_resource(Resource, EncryptedToken, TokenValidUntil) ->
+decode_disposable_payment_resource(Resource, EncryptedToken, EncryptedTokenData, TokenValidUntil) ->
     #domain_DisposablePaymentResource{payment_tool = PaymentTool, payment_session_id = SessionID} = Resource,
     ClientInfo = Resource#domain_DisposablePaymentResource.client_info,
     genlib_map:compact(#{
-        <<"paymentToolToken">> => EncryptedToken,
+        <<"paymentToolToken">> => EncryptedTokenData,
+        <<"resourceToken">> => EncryptedToken,
         <<"paymentSession">> => capi_handler_utils:wrap_payment_session(decode_client_info_ext(ClientInfo), SessionID),
         <<"paymentToolDetails">> => decode_payment_tool_details(PaymentTool),
         <<"clientInfo">> => decode_client_info(ClientInfo),
