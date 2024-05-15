@@ -101,20 +101,25 @@ process_request('CreatePaymentResource', Req, Context, Resolution) ->
         ClientUrl = get_client_url(ClientInfo1),
         ClientInfo = maps:put(<<"url">>, ClientUrl, ClientInfo1),
         Data = maps:get(<<"paymentTool">>, Params),
-        {PaymentTool, PaymentSessionID, PaymentToolDeadline} =
+        {Token, PaymentTool, PaymentSessionID, PaymentToolDeadline} =
             case Data of
                 #{<<"paymentToolType">> := <<"CardData">>} ->
-                    erlang:append_element(process_card_data(Data, Context), undefined);
+                    {T, PT, S} = process_card_data(Data, Context),
+                    {T, PT, S, undefined};
                 #{<<"paymentToolType">> := <<"PaymentTerminalData">>} ->
-                    {process_payment_terminal_data(Data), <<>>, undefined};
+                    TD = process_payment_terminal_data(Data),
+                    {TD, TD, <<>>, undefined};
                 #{<<"paymentToolType">> := <<"DigitalWalletData">>} ->
-                    {process_digital_wallet_data(Data, Context), <<>>, undefined};
+                    {T, DW} = process_digital_wallet_data(Data, Context),
+                    {T, DW, <<>>, undefined};
                 #{<<"paymentToolType">> := <<"TokenizedCardData">>} ->
                     process_tokenized_card_data(Data, Context);
                 #{<<"paymentToolType">> := <<"CryptoWalletData">>} ->
-                    {process_crypto_wallet_data(Data), <<>>, undefined};
+                    WD = process_crypto_wallet_data(Data),
+                    {WD, WD, <<>>, undefined};
                 #{<<"paymentToolType">> := <<"MobileCommerceData">>} ->
-                    {process_mobile_commerce_data(Data, Context), <<>>, undefined}
+                    MCD = process_mobile_commerce_data(Data, Context),
+                    {MCD, MCD, <<>>, undefined}
             end,
         TokenData = #{
             payment_tool => PaymentTool,
@@ -129,6 +134,7 @@ process_request('CreatePaymentResource', Req, Context, Resolution) ->
             {201, #{},
                 capi_handler_decoder:decode_disposable_payment_resource(
                     PaymentResource,
+                    base64:encode(erlang:term_to_binary(Token)),
                     capi_crypto:encode_token(TokenData),
                     maps:get(valid_until, TokenData)
                 )}}
@@ -207,7 +213,7 @@ process_card_data(Data, Context) ->
         ok ->
             {Token, SessionID} = put_card_data_to_cds(CardData, SessionData, Context),
             BankCard = construct_bank_card(Token, CardData, SessionData),
-            {{bank_card, enrich_bank_card(BankCard, BankInfo)}, SessionID};
+            {Token, {bank_card, enrich_bank_card(BankCard, BankInfo)}, SessionID};
         {error, Error} ->
             throw({ok, validation_error(Error)})
     end.
@@ -384,13 +390,14 @@ process_digital_wallet_data(Data, Context) ->
     Ref = encode_payment_service_ref(maps:get(<<"provider">>, Data)),
     case validate_payment_service_ref(Ref) of
         {ok, _} ->
-            Token = maps:get(<<"token">>, Data, undefined),
+            Token0 = maps:get(<<"token">>, Data, undefined),
+            Token1 = capi_utils:maybe(Token0, fun(T) -> store_token_in_tds(T, Context) end),
             DigitalWallet = #domain_DigitalWallet{
                 id = maps:get(<<"id">>, Data),
                 payment_service = encode_payment_service_ref(maps:get(<<"provider">>, Data)),
-                token = capi_utils:maybe(Token, fun(T) -> store_token_in_tds(T, Context) end)
+                token = Token1
             },
-            {digital_wallet, DigitalWallet};
+            {Token1, {digital_wallet, DigitalWallet}};
         {error, object_not_found} ->
             throw({ok, logic_error(invalidRequest, <<"Digital wallet provider is invalid">>)})
     end.
@@ -410,7 +417,7 @@ process_tokenized_card_data(Data, Context) ->
         ok ->
             {Token, SessionID} = put_card_data_to_cds(CardData, SessionData, Context),
             {BankCard, Deadline} = construct_tokenized_bank_card(Token, CardData, SessionData, UnwrappedPaymentTool),
-            {{bank_card, enrich_bank_card(BankCard, BankInfo)}, SessionID, Deadline};
+            {Token, {bank_card, enrich_bank_card(BankCard, BankInfo)}, SessionID, Deadline};
         {error, Error} ->
             throw({ok, validation_error(Error)})
     end.
