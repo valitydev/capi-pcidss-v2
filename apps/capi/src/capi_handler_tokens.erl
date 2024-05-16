@@ -108,7 +108,7 @@ process_request('CreatePaymentResource', Req, Context, Resolution) ->
                     {T, PT, S, undefined};
                 #{<<"paymentToolType">> := <<"PaymentTerminalData">>} ->
                     TD = process_payment_terminal_data(Data),
-                    {TD, TD, <<>>, undefined};
+                    {undefined, TD, <<>>, undefined};
                 #{<<"paymentToolType">> := <<"DigitalWalletData">>} ->
                     {T, DW} = process_digital_wallet_data(Data, Context),
                     {T, DW, <<>>, undefined};
@@ -116,10 +116,10 @@ process_request('CreatePaymentResource', Req, Context, Resolution) ->
                     process_tokenized_card_data(Data, Context);
                 #{<<"paymentToolType">> := <<"CryptoWalletData">>} ->
                     WD = process_crypto_wallet_data(Data),
-                    {WD, WD, <<>>, undefined};
+                    {undefined, WD, <<>>, undefined};
                 #{<<"paymentToolType">> := <<"MobileCommerceData">>} ->
                     MCD = process_mobile_commerce_data(Data, Context),
-                    {MCD, MCD, <<>>, undefined}
+                    {undefined, MCD, <<>>, undefined}
             end,
         TokenData = #{
             payment_tool => PaymentTool,
@@ -134,7 +134,7 @@ process_request('CreatePaymentResource', Req, Context, Resolution) ->
             {201, #{},
                 capi_handler_decoder:decode_disposable_payment_resource(
                     PaymentResource,
-                    base64:encode(erlang:term_to_binary(Token)),
+                    Token,
                     capi_crypto:encode_token(TokenData),
                     maps:get(valid_until, TokenData)
                 )}}
