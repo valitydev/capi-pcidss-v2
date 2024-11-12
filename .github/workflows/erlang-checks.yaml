@@ -36,5 +36,4 @@ jobs:
       rebar-version: ${{ needs.setup.outputs.rebar-version }}
       use-thrift: true
       thrift-version: ${{ needs.setup.outputs.thrift-version }}
-      use-coveralls: true
       upload-coverage: false
