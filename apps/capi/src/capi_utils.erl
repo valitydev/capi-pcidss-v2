@@ -18,7 +18,7 @@
 
 -export([to_universal_time/1]).
 
--export([maybe/2]).
+-export(['maybe'/2]).
 
 % 1 min
 -define(MAX_REQUEST_DEADLINE_TIME, timer:minutes(1)).
@@ -171,10 +171,10 @@ clamp_max_request_deadline(Value) when is_integer(Value) ->
             Value
     end.
 
--spec maybe(T | undefined, fun((T) -> R)) -> R | undefined.
-maybe(undefined, _Fun) ->
+-spec 'maybe'(T | undefined, fun((T) -> R)) -> R | undefined.
+'maybe'(undefined, _Fun) ->
     undefined;
-maybe(V, Fun) ->
+'maybe'(V, Fun) ->
     Fun(V).
 
 %%

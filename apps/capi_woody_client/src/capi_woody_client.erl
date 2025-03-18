@@ -65,7 +65,7 @@ apply_retry_step({wait, Timeout, Retry}, Deadline0, Error) ->
 get_service_options(ServiceName) ->
     construct_opts(maps:get(ServiceName, genlib_app:env(?MODULE, services))).
 
-construct_opts(Opts = #{url := Url}) ->
+construct_opts(#{url := Url} = Opts) ->
     Opts#{url := genlib:to_binary(Url)};
 construct_opts(Url) ->
     #{url => genlib:to_binary(Url)}.
@@ -74,7 +74,7 @@ construct_opts(Url) ->
 get_service_modname(cds_storage) ->
     {cds_proto_storage_thrift, 'Storage'};
 get_service_modname(tds_storage) ->
-    {tds_proto_storage_thrift, 'TokenStorage'};
+    {tds_storage_thrift, 'TokenStorage'};
 get_service_modname(payment_tool_provider_apple_pay) ->
     {dmsl_paytool_provider_thrift, 'PaymentToolProvider'};
 get_service_modname(payment_tool_provider_google_pay) ->
@@ -86,7 +86,7 @@ get_service_modname(payment_tool_provider_yandex_pay) ->
 get_service_modname(binbase) ->
     {binbase_binbase_thrift, 'Binbase'};
 get_service_modname(moneypenny) ->
-    {moneypenny_mnp_thrift, 'Mnp'}.
+    {mnp_thrift, 'Mnp'}.
 
 get_service_deadline(ServiceName) ->
     ServiceDeadlines = genlib_app:env(?MODULE, service_deadlines, #{}),
