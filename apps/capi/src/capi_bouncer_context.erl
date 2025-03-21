@@ -58,7 +58,7 @@ build(Prototypes, {Acc0, External}, WoodyCtx) ->
     Acc1 = lists:foldl(fun({T, Params}, Acc) -> build(T, Params, Acc, WoodyCtx) end, Acc0, Prototypes),
     {Acc1, External}.
 
-build(operation, Params = #{id := OperationID}, Acc, _WoodyCtx) ->
+build(operation, #{id := OperationID} = Params, Acc, _WoodyCtx) ->
     Acc#ctx_v1_ContextFragment{
         capi = #ctx_v1_ContextCommonAPI{
             op = #ctx_v1_CommonAPIOperation{
@@ -86,7 +86,7 @@ build(payment_tool, Params, Acc, _WoodyCtx) ->
     }.
 
 maybe_with(Name, Params, Then) ->
-    capi_utils:maybe(maps:get(Name, Params, undefined), Then).
+    capi_utils:'maybe'(maps:get(Name, Params, undefined), Then).
 
 operation_id_to_binary(V) ->
     erlang:atom_to_binary(V, utf8).

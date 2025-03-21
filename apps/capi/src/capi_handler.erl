@@ -47,8 +47,6 @@
     Context :: processing_context()
 ) -> {ok, request_state()} | {error, noimpl}.
 
--import(capi_handler_utils, [logic_error/2, server_error/1]).
-
 %% @WARNING Must be refactored in case of different classes of users using this API
 -define(REALM, <<"external">>).
 
@@ -135,7 +133,7 @@ handle_function_(OperationID, Req, SwagContext0, _HandlerOpts) ->
             _ = logger:info("API Key authorization failed for ~p due to ~p", [OperationID, Reason]),
             {error, {401, #{}, undefined}};
         throw:{bad_deadline, _Deadline} ->
-            {ok, logic_error(invalidDeadline, <<"Invalid data in X-Request-Deadline header">>)};
+            {ok, capi_handler_utils:logic_error(invalidDeadline, <<"Invalid data in X-Request-Deadline header">>)};
         throw:{handler_function_clause, _OperationID} ->
             _ = logger:error("Operation ~p failed due to missing handler", [OperationID]),
             {error, {501, #{}, undefined}};
@@ -172,7 +170,7 @@ respond(Response) ->
 get_auth_context(#{auth_context := AuthContext}) ->
     AuthContext.
 
-do_authorize_api_key(SwagContext = #{auth_context := PreAuthContext}, WoodyContext) ->
+do_authorize_api_key(#{auth_context := PreAuthContext} = SwagContext, WoodyContext) ->
     case capi_auth:authorize_api_key(PreAuthContext, make_token_context(SwagContext), WoodyContext) of
         {ok, AuthContext} ->
             SwagContext#{auth_context => AuthContext};
@@ -224,11 +222,11 @@ attach_deadline(#{'X-Request-Deadline' := Header}, Context) ->
     end.
 
 process_woody_error(_Source, result_unexpected, _Details) ->
-    {error, server_error(500)};
+    {error, capi_handler_utils:server_error(500)};
 process_woody_error(_Source, resource_unavailable, _Details) ->
-    {error, server_error(503)};
+    {error, capi_handler_utils:server_error(503)};
 process_woody_error(_Source, result_unknown, _Details) ->
-    {error, server_error(504)}.
+    {error, capi_handler_utils:server_error(504)}.
 
 process_general_error(Class, Reason, Stacktrace, OperationID, Req, SwagContext) ->
     _ = logger:error(
@@ -242,7 +240,7 @@ process_general_error(Class, Reason, Stacktrace, OperationID, Req, SwagContext) 
             }
         }
     ),
-    {error, server_error(500)}.
+    {error, capi_handler_utils:server_error(500)}.
 
 set_otel_context(#{cowboy_req := Req}) ->
     Headers = cowboy_req:headers(Req),

@@ -6,9 +6,9 @@
 -include_lib("damsel/include/dmsl_base_thrift.hrl").
 -include_lib("damsel/include/dmsl_domain_thrift.hrl").
 -include_lib("cds_proto/include/cds_proto_storage_thrift.hrl").
--include_lib("tds_proto/include/tds_proto_storage_thrift.hrl").
+-include_lib("tds_proto/include/tds_storage_thrift.hrl").
 -include_lib("damsel/include/dmsl_paytool_provider_thrift.hrl").
--include_lib("moneypenny/include/moneypenny_mnp_thrift.hrl").
+-include_lib("moneypenny/include/mnp_thrift.hrl").
 
 -include_lib("bouncer_proto/include/bouncer_rstn_thrift.hrl").
 
@@ -17,8 +17,6 @@
 -export([prepare/3]).
 -export([get_token_providers/0]).
 -export([get_mobile_operators/0]).
-
--import(capi_handler_utils, [logic_error/2, validation_error/1]).
 
 -define(APP, capi_pcidss).
 
@@ -165,7 +163,7 @@ get_peer_info(#{swagger_context := #{cowboy_req := Req}}) ->
         {ok, IP} ->
             IP;
         _ ->
-            throw({ok, logic_error(invalidRequest, <<"Malformed 'x-forwarded-for' header">>)})
+            throw({ok, capi_handler_utils:logic_error(invalidRequest, <<"Malformed 'x-forwarded-for' header">>)})
     end.
 
 get_replacement_ip(ClientInfo) ->
@@ -185,7 +183,7 @@ delete_query_params(Url) ->
             UrlWithoutParams;
         {error, Error, Description} ->
             _ = logger:notice("Unexpected client info url reason: ~p ~p", [Error, Description]),
-            throw({ok, logic_error(invalidRequest, <<"Client info url is invalid">>)})
+            throw({ok, capi_handler_utils:logic_error(invalidRequest, <<"Client info url is invalid">>)})
     end.
 
 %%
@@ -215,7 +213,7 @@ process_card_data(Data, Context) ->
             BankCard = construct_bank_card(Token, CardData, SessionData),
             {Token, {bank_card, enrich_bank_card(BankCard, BankInfo)}, SessionID};
         {error, Error} ->
-            throw({ok, validation_error(Error)})
+            throw({ok, capi_handler_utils:validation_error(Error)})
     end.
 
 construct_bank_card(Token, CardData, SessionData) ->
@@ -292,7 +290,7 @@ put_card_to_cds(CardData, Context) ->
         {ok, #cds_PutCardResult{bank_card = #cds_BankCard{token = Token}}} ->
             Token;
         {exception, #cds_InvalidCardData{}} ->
-            throw({ok, logic_error(invalidRequest, <<"Card data is invalid">>)})
+            throw({ok, capi_handler_utils:logic_error(invalidRequest, <<"Card data is invalid">>)})
     end.
 
 %% Seems to fit within PCIDSS requirments for all PAN lengths
@@ -336,7 +334,7 @@ unwrap_merchant_id(Provider, EncodedID) ->
                     };
                 _ ->
                     _ = logger:warning("invalid merchant id: ~p ~p", [Provider, EncodedID]),
-                    capi_handler:respond(logic_error(invalidRequest, <<"Invalid merchant ID">>))
+                    capi_handler:respond(capi_handler_utils:logic_error(invalidRequest, <<"Invalid merchant ID">>))
             end
     end.
 
@@ -379,11 +377,11 @@ process_payment_terminal_data(Data) ->
             Metadata = maps:get(<<"metadata">>, Data, undefined),
             PaymentTerminal = #domain_PaymentTerminal{
                 payment_service = Ref,
-                metadata = capi_utils:maybe(Metadata, fun encode_resource_metadata/1)
+                metadata = capi_utils:'maybe'(Metadata, fun encode_resource_metadata/1)
             },
             {payment_terminal, PaymentTerminal};
         {error, object_not_found} ->
-            throw({ok, logic_error(invalidRequest, <<"Terminal provider is invalid">>)})
+            throw({ok, capi_handler_utils:logic_error(invalidRequest, <<"Terminal provider is invalid">>)})
     end.
 
 process_digital_wallet_data(Data, Context) ->
@@ -391,7 +389,7 @@ process_digital_wallet_data(Data, Context) ->
     case validate_payment_service_ref(Ref) of
         {ok, _} ->
             Token0 = maps:get(<<"token">>, Data, undefined),
-            Token1 = capi_utils:maybe(Token0, fun(T) -> store_token_in_tds(T, Context) end),
+            Token1 = capi_utils:'maybe'(Token0, fun(T) -> store_token_in_tds(T, Context) end),
             DigitalWallet = #domain_DigitalWallet{
                 id = maps:get(<<"id">>, Data),
                 payment_service = encode_payment_service_ref(maps:get(<<"provider">>, Data)),
@@ -399,7 +397,7 @@ process_digital_wallet_data(Data, Context) ->
             },
             {Token1, {digital_wallet, DigitalWallet}};
         {error, object_not_found} ->
-            throw({ok, logic_error(invalidRequest, <<"Digital wallet provider is invalid">>)})
+            throw({ok, capi_handler_utils:logic_error(invalidRequest, <<"Digital wallet provider is invalid">>)})
     end.
 
 store_token_in_tds(TokenContent, Context) ->
@@ -419,7 +417,7 @@ process_tokenized_card_data(Data, Context) ->
             {BankCard, Deadline} = construct_tokenized_bank_card(Token, CardData, SessionData, UnwrappedPaymentTool),
             {Token, {bank_card, enrich_bank_card(BankCard, BankInfo)}, SessionID, Deadline};
         {error, Error} ->
-            throw({ok, validation_error(Error)})
+            throw({ok, capi_handler_utils:validation_error(Error)})
     end.
 
 unwrap_card_data_token(Data, Context) ->
@@ -428,7 +426,7 @@ unwrap_card_data_token(Data, Context) ->
         {ok, Tool} ->
             Tool;
         {exception, #base_InvalidRequest{}} ->
-            throw({ok, logic_error(invalidRequest, <<"Tokenized card data is invalid">>)})
+            throw({ok, capi_handler_utils:logic_error(invalidRequest, <<"Tokenized card data is invalid">>)})
     end.
 
 get_token_provider_service_name(Data) ->
@@ -694,9 +692,9 @@ get_mobile_operator(MobilePhone, Context) ->
         {ok, #mnp_ResponseData{operator = Operator}} ->
             {ok, Operator};
         {exception, #mnp_BadPhoneFormat{}} ->
-            throw({ok, logic_error(invalidRequest, <<"Bad phone format.">>)});
+            throw({ok, capi_handler_utils:logic_error(invalidRequest, <<"Bad phone format.">>)});
         {exception, #mnp_OperatorNotFound{}} ->
-            throw({ok, logic_error(invalidRequest, <<"Operator not found.">>)})
+            throw({ok, capi_handler_utils:logic_error(invalidRequest, <<"Operator not found.">>)})
     end.
 
 encode_request_params(#{<<"cc">> := Cc, <<"ctn">> := Ctn}) ->
@@ -735,19 +733,19 @@ get_bank_info(CardDataPan, Context) ->
         {ok, BankInfo} ->
             BankInfo;
         {error, _Reason} ->
-            throw({ok, logic_error(invalidRequest, <<"Unsupported card">>)})
+            throw({ok, capi_handler_utils:logic_error(invalidRequest, <<"Unsupported card">>)})
     end.
 
-add_metadata(NS, Metadata, BankCard = #domain_BankCard{metadata = Acc = #{}}) ->
+add_metadata(NS, Metadata, #domain_BankCard{metadata = Acc = #{}} = BankCard) ->
     undefined = maps:get(NS, Acc, undefined),
     BankCard#domain_BankCard{
         metadata = Acc#{NS => capi_msgp_marshalling:marshal(Metadata)}
     };
-add_metadata(NS, Metadata, BankCard = #domain_BankCard{metadata = undefined}) ->
+add_metadata(NS, Metadata, #domain_BankCard{metadata = undefined} = BankCard) ->
     add_metadata(NS, Metadata, BankCard#domain_BankCard{metadata = #{}}).
 
 encode_payment_service_ref(Provider) ->
     #domain_PaymentServiceRef{id = Provider}.
 
-validate_payment_service_ref(Ref = #domain_PaymentServiceRef{}) ->
+validate_payment_service_ref(#domain_PaymentServiceRef{} = Ref) ->
     dmt_client:try_checkout_data({payment_service, Ref}).

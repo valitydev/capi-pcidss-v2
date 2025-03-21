@@ -77,7 +77,7 @@ mk_operation_id_getter(#{env := Env}) ->
     %% NOTE: Be careful when upgrade cowboy in this project
     %% because cowboy_router:execute/2 call can change.
     fun
-        (Req = #{host := _Host, path := _Path}) ->
+        (#{host := _Host, path := _Path} = Req) ->
             case cowboy_router:execute(Req, Env) of
                 {ok, _, #{handler_opts := {_Operations, _LogicHandler, _SwaggerHandlerOpts} = HandlerOpts}} ->
                     get_operation_id_meta(Req, HandlerOpts);

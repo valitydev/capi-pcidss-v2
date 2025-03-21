@@ -40,11 +40,8 @@ encode(Realm, PartyID, ShopID) ->
 -spec encode(merchant_data()) -> merchant_id().
 encode(MerchantData) ->
     Codec = thrift_strict_binary_codec:new(),
-    Data =
-        case thrift_strict_binary_codec:write(Codec, ?THRIFT_TYPE, MerchantData) of
-            {ok, Codec1} ->
-                thrift_strict_binary_codec:close(Codec1)
-        end,
+    {ok, Codec1} = thrift_strict_binary_codec:write(Codec, ?THRIFT_TYPE, MerchantData),
+    Data = thrift_strict_binary_codec:close(Codec1),
     jose_base64url:encode(Data, #{padding => false}).
 
 -spec decode(merchant_id()) -> merchant_data() | undefined.
