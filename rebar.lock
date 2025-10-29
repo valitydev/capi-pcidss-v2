@@ -45,7 +45,7 @@
  {<<"ctx">>,{pkg,<<"ctx">>,<<"0.6.0">>},2},
  {<<"damsel">>,
   {git,"https://github.com/valitydev/damsel.git",
-       {ref,"8cab698cd78125ac47489d0ba81169df376757a4"}},
+       {ref,"f831d3aa5fdfd0338b41af44d1eeffe810ca9708"}},
   0},
  {<<"dmt_client">>,
   {git,"https://github.com/valitydev/dmt_client.git",
@@ -137,7 +137,7 @@
        {ref,"3a60e5dc5bbd709495024f26e100b041c3547fd9"}},
   1},
  {<<"tls_certificate_check">>,
-  {pkg,<<"tls_certificate_check">>,<<"1.28.0">>},
+  {pkg,<<"tls_certificate_check">>,<<"1.29.0">>},
   1},
  {<<"token_keeper_client">>,
   {git,"https://github.com/valitydev/token-keeper-client.git",
@@ -185,7 +185,7 @@
  {<<"quantile_estimator">>, <<"EF50A361F11B5F26B5F16D0696E46A9E4661756492C981F7B2229EF42FF1CD15">>},
  {<<"ranch">>, <<"8C7A100A139FD57F17327B6413E4167AC559FBC04CA7448E9BE9057311597A1D">>},
  {<<"ssl_verify_fun">>, <<"CF344F5692C82D2CD7554F5EC8FD961548D4FD09E7D22F5B62482E5AEAEBD4B0">>},
- {<<"tls_certificate_check">>, <<"C39BF21F67C2D124AE905454FAD00F27E625917E8AB1009146E916E1DF6AB275">>},
+ {<<"tls_certificate_check">>, <<"4473005EB0BBDAD215D7083A230E2E076F538D9EA472C8009FD22006A4CFC5F6">>},
  {<<"unicode_util_compat">>, <<"BC84380C9AB48177092F43AC89E4DFA2C6D62B40B8BD132B1059ECC7232F9A78">>}]},
 {pkg_hash_ext,[
  {<<"accept">>, <<"CA69388943F5DAD2E7232A5478F16086E3C872F48E32B88B378E1885A59F5649">>},
@@ -215,6 +215,6 @@
  {<<"quantile_estimator">>, <<"282A8A323CA2A845C9E6F787D166348F776C1D4A41EDE63046D72D422E3DA946">>},
  {<<"ranch">>, <<"49FBCFD3682FAB1F5D109351B61257676DA1A2FDBE295904176D5E521A2DDFE5">>},
  {<<"ssl_verify_fun">>, <<"BDB0D2471F453C88FF3908E7686F86F9BE327D065CC1EC16FA4540197EA04680">>},
- {<<"tls_certificate_check">>, <<"3AB058C3F9457FFFCA916729587415F0DDC822048A0E5B5E2694918556D92DF1">>},
+ {<<"tls_certificate_check">>, <<"5B0D0E5CB0F928BC4F210DF667304ED91C5BFF2A391CE6BDEDFBFE70A8F096C5">>},
  {<<"unicode_util_compat">>, <<"25EEE6D67DF61960CF6A794239566599B09E17E668D3700247BC498638152521">>}]}
 ].
