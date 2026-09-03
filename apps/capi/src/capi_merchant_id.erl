@@ -1,9 +1,10 @@
 -module(capi_merchant_id).
 
 -include_lib("damsel/include/dmsl_paytool_provider_thrift.hrl").
+-include_lib("damsel/include/dmsl_domain_thrift.hrl").
 
--type party_id() :: dmsl_domain_thrift:'PartyID'().
--type shop_id() :: dmsl_domain_thrift:'ShopID'().
+-type party_id() :: dmsl_base_thrift:'ID'().
+-type shop_id() :: dmsl_base_thrift:'ID'().
 -type realm() :: dmsl_domain_thrift:'PaymentInstitutionRealm'().
 -type merchant_data() :: dmsl_paytool_provider_thrift:'MerchantID'().
 -type merchant_id() :: binary().
@@ -18,11 +19,11 @@
 -define(THRIFT_TYPE, {struct, struct, {dmsl_paytool_provider_thrift, 'MerchantID'}}).
 
 -spec party_id(merchant_data()) -> party_id().
-party_id(#paytool_provider_MerchantID{party_id = PartyID}) ->
+party_id(#paytool_provider_MerchantID{party_ref = #domain_PartyConfigRef{id = PartyID}}) ->
     PartyID.
 
 -spec shop_id(merchant_data()) -> shop_id().
-shop_id(#paytool_provider_MerchantID{shop_id = ShopID}) ->
+shop_id(#paytool_provider_MerchantID{shop_ref = #domain_ShopConfigRef{id = ShopID}}) ->
     ShopID.
 
 -spec realm(merchant_data()) -> realm() | undefined.
@@ -32,8 +33,8 @@ realm(#paytool_provider_MerchantID{realm = Realm}) ->
 -spec encode(realm(), party_id(), shop_id()) -> merchant_id().
 encode(Realm, PartyID, ShopID) ->
     encode(#paytool_provider_MerchantID{
-        party_id = PartyID,
-        shop_id = ShopID,
+        party_ref = #domain_PartyConfigRef{id = PartyID},
+        shop_ref = #domain_ShopConfigRef{id = ShopID},
         realm = Realm
     }).
 

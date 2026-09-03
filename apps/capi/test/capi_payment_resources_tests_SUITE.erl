@@ -1063,7 +1063,4 @@ get_keysource(Key, Config) ->
 gateway_merchant_id() ->
     % MerchantID сгенерированный в capi методом
     % capi_merchant_id:encode(live, <<"party-a4ef-4d03-b666-bdec4b26c5f7">>, <<"shop-a4ef-4d03-b666-bdec4b26c5f7">>)
-    <<
-        "CwABAAAAIXBhcnR5LWE0ZWYtNGQwMy1iNjY2LWJkZWM0YjI2YzVmNwsAAgAAAC"
-        "BzaG9wLWE0ZWYtNGQwMy1iNjY2LWJkZWM0YjI2YzVmNwgAAwAAAAEA"
-    >>.
+    capi_merchant_id:encode(live, <<"party-a4ef-4d03-b666-bdec4b26c5f7">>, <<"shop-a4ef-4d03-b666-bdec4b26c5f7">>).

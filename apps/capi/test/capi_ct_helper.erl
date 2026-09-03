@@ -4,7 +4,7 @@
 -include_lib("capi_dummy_data.hrl").
 -include_lib("capi_token_keeper_data.hrl").
 -include_lib("damsel/include/dmsl_domain_thrift.hrl").
--include_lib("damsel/include/dmsl_domain_conf_thrift.hrl").
+-include_lib("damsel/include/dmsl_domain_conf_v2_thrift.hrl").
 
 -export([init_suite/2]).
 -export([init_suite/3]).
@@ -70,33 +70,41 @@ init_suite(Module, Config, CapiEnv) ->
     ServiceURLs = mock_services_(
         [
             {
-                'Repository',
-                {dmsl_domain_conf_thrift, 'Repository'},
-                fun('Checkout', _) ->
-                    {ok, #domain_conf_Snapshot{
-                        version = 1,
-                        domain = #{
-                            ?PAYMENT_SYSTEM_REF(<<"VISA">>) =>
-                                ?PAYMENT_SYSTEM_OBJ(
-                                    <<"VISA">>,
-                                    bankcard_validator_legacy:get_payment_system_ruleset(<<"VISA">>)
-                                ),
-                            ?PAYMENT_SYSTEM_REF(<<"MASTERCARD">>) =>
-                                ?PAYMENT_SYSTEM_OBJ(
-                                    <<"MASTERCARD">>,
-                                    bankcard_validator_legacy:get_payment_system_ruleset(<<"MASTERCARD">>)
-                                ),
-                            ?PAYMENT_SERVICE_REF(<<"qiwi">>) =>
-                                ?PAYMENT_SERVICE_OBJ(
-                                    <<"qiwi">>
-                                ),
-                            ?PAYMENT_SERVICE_REF(<<"euroset">>) =>
-                                ?PAYMENT_SERVICE_OBJ(
-                                    <<"euroset">>
-                                )
-                        }
-                    }}
+                'RepositoryClient',
+                {dmsl_domain_conf_v2_thrift, 'RepositoryClient'},
+                fun
+                    ('CheckoutObject', {{version, V}, ?PAYMENT_SYSTEM_REF(<<"VISA">>)}) ->
+                        PaymentSystemObject = ?PAYMENT_SYSTEM_OBJ(
+                            <<"VISA">>,
+                            bankcard_validator_legacy:get_payment_system_ruleset(<<"VISA">>)
+                        ),
+                        {ok, mk_versioned_object(PaymentSystemObject, V)};
+                    ('CheckoutObject', {{version, V}, ?PAYMENT_SYSTEM_REF(<<"MASTERCARD">>)}) ->
+                        PaymentSystemObject = ?PAYMENT_SYSTEM_OBJ(
+                            <<"VISA">>,
+                            bankcard_validator_legacy:get_payment_system_ruleset(<<"MASTERCARD">>)
+                        ),
+                        {ok, mk_versioned_object(PaymentSystemObject, V)};
+                    ('CheckoutObject', {{version, V}, ?PAYMENT_SYSTEM_REF(<<"NSPK MIR">>)}) ->
+                        PaymentSystemObject = ?PAYMENT_SYSTEM_OBJ(
+                            <<"NSPK MIR">>,
+                            bankcard_validator_legacy:get_payment_system_ruleset(<<"NSPK MIR">>)
+                        ),
+                        {ok, mk_versioned_object(PaymentSystemObject, V)};
+                    ('CheckoutObject', {{version, V}, ?PAYMENT_SERVICE_REF(<<"qiwi">>)}) ->
+                        PaymentServiceObject = ?PAYMENT_SERVICE_OBJ(<<"qiwi">>),
+                        {ok, mk_versioned_object(PaymentServiceObject, V)};
+                    ('CheckoutObject', {{version, V}, ?PAYMENT_SERVICE_REF(<<"euroset">>)}) ->
+                        PaymentServiceObject = ?PAYMENT_SERVICE_OBJ(<<"euroset">>),
+                        {ok, mk_versioned_object(PaymentServiceObject, V)};
+                    ('CheckoutObject', {{version, _V}, _ObjectRef}) ->
+                        erlang:throw(#domain_conf_v2_ObjectNotFound{})
                 end
+            },
+            {
+                'Repository',
+                {dmsl_domain_conf_v2_thrift, 'Repository'},
+                fun('GetLatestVersion', _) -> {ok, ?INTEGER} end
             }
         ],
         SupPid
@@ -281,4 +289,18 @@ get_lifetime(YY, MM, DD) ->
         <<"years">> => YY,
         <<"months">> => MM,
         <<"days">> => DD
+    }.
+
+mk_versioned_object(Object, Version) ->
+    #domain_conf_v2_VersionedObject{
+        info = #domain_conf_v2_VersionedObjectInfo{
+            version = Version,
+            changed_at = genlib_rfc3339:format(genlib_time:unow(), second),
+            changed_by = #domain_conf_v2_Author{
+                id = ?STRING,
+                name = ?STRING,
+                email = ?STRING
+            }
+        },
+        object = Object
     }.

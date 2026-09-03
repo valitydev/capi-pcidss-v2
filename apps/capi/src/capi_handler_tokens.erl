@@ -8,6 +8,7 @@
 -include_lib("cds_proto/include/cds_proto_storage_thrift.hrl").
 -include_lib("tds_proto/include/tds_storage_thrift.hrl").
 -include_lib("damsel/include/dmsl_paytool_provider_thrift.hrl").
+-include_lib("damsel/include/dmsl_domain_conf_v2_thrift.hrl").
 -include_lib("moneypenny/include/mnp_thrift.hrl").
 
 -include_lib("bouncer_proto/include/bouncer_rstn_thrift.hrl").
@@ -748,4 +749,10 @@ encode_payment_service_ref(Provider) ->
     #domain_PaymentServiceRef{id = Provider}.
 
 validate_payment_service_ref(#domain_PaymentServiceRef{} = Ref) ->
-    dmt_client:try_checkout_data({payment_service, Ref}).
+    try dmt_client:checkout_object({payment_service, Ref}) of
+        Object ->
+            {ok, Object}
+    catch
+        throw:#domain_conf_v2_ObjectNotFound{} ->
+            {error, object_not_found}
+    end.
