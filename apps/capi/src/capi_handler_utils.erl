@@ -8,6 +8,8 @@
 
 -export([get_auth_context/1]).
 
+-export([request_headers/1]).
+
 -export([get_party_id/1]).
 
 -export([merge_and_compact/2]).
@@ -81,6 +83,12 @@ service_call({ServiceName, Function, Args}, #{woody_context := WoodyContext}) ->
 -spec get_auth_context(processing_context()) -> any().
 get_auth_context(#{swagger_context := #{auth_context := AuthContext}}) ->
     AuthContext.
+
+-spec request_headers(processing_context()) -> cowboy:http_headers().
+request_headers(#{swagger_context := #{cowboy_req := Req}}) ->
+    cowboy_req:headers(Req);
+request_headers(_) ->
+    #{}.
 
 %% Utils
 

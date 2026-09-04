@@ -423,7 +423,11 @@ create_visa_with_empty_cvc_ok_test(Config) ->
         ],
         Config
     ),
-    ClientInfo = #{<<"fingerprint">> => <<"test fingerprint">>},
+    ClientInfo = #{
+        <<"deviceInfo">> => ?DEVICE_INFO,
+        <<"browserInfo">> => ?BROWSER_INFO,
+        <<"fingerprint">> => <<"test fingerprint">>
+    },
     {ok, #{
         <<"paymentToolDetails">> := #{
             <<"detailsType">> := <<"PaymentToolDetailsBankCard">>,
@@ -432,6 +436,7 @@ create_visa_with_empty_cvc_ok_test(Config) ->
             <<"first6">> := <<"411111">>,
             <<"cardNumberMask">> := <<"411111******1111">>
         },
+        <<"paymentSession">> := PaymentSession,
         <<"resourceToken">> := ?STRING
     }} = capi_client_tokens:create_payment_resource(?config(context, Config), #{
         <<"paymentTool">> => #{
@@ -441,7 +446,17 @@ create_visa_with_empty_cvc_ok_test(Config) ->
             <<"expDate">> => <<"08/27">>
         },
         <<"clientInfo">> => ClientInfo
-    }).
+    }),
+    #{
+        <<"clientInfo">> := #{
+            <<"browser_info">> := BrowserInfo,
+            <<"device_info">> := DeviceInfo,
+            <<"peer_accept_header">> := <<"application/json">>,
+            <<"peer_user_agent">> := <<"hackney/", _Ver/binary>>
+        }
+    } = capi_utils:base64url_to_map(PaymentSession),
+    ?assertEqual(?BROWSER_INFO, BrowserInfo),
+    ?assertEqual(?DEVICE_INFO, DeviceInfo).
 
 -spec create_visa_with_wrong_cvc_test(_) -> _.
 create_visa_with_wrong_cvc_test(Config) ->

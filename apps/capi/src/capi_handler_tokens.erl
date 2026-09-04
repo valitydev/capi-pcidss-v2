@@ -90,10 +90,13 @@ process_request('CreatePaymentResource', Req, Context, Resolution) ->
                 end
         end,
 
+    Headers = capi_handler_utils:request_headers(Context),
     ClientInfo1 = ClientInfo0#{
         <<"ip">> => ClientIP,
         <<"peer_ip">> => PeerIP,
-        <<"user_ip">> => UserIP
+        <<"user_ip">> => UserIP,
+        <<"peer_user_agent">> => maps:get(<<"user-agent">>, Headers, undefined),
+        <<"peer_accept_header">> => maps:get(<<"accept">>, Headers, undefined)
     },
 
     try
