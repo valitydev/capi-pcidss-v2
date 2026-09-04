@@ -115,10 +115,98 @@ decode_client_info_ext(ClientInfo) ->
         <<"ip">> => ClientInfo#domain_ClientInfo.ip_address,
         <<"peer_ip">> => ClientInfo#domain_ClientInfo.peer_ip_address,
         <<"user_ip">> => ClientInfo#domain_ClientInfo.user_ip_address,
-        <<"url">> => ClientInfo#domain_ClientInfo.url
+        <<"url">> => ClientInfo#domain_ClientInfo.url,
+        <<"browser_info">> => decode_browser_info(ClientInfo#domain_ClientInfo.browser_info),
+        <<"device_info">> => decode_device_info(ClientInfo#domain_ClientInfo.device_info),
+        <<"peer_user_agent">> => ClientInfo#domain_ClientInfo.peer_user_agent,
+        <<"peer_accept_header">> => ClientInfo#domain_ClientInfo.peer_accept_header
     }).
 
 %%
+
+decode_browser_info(undefined) ->
+    undefined;
+decode_browser_info(
+    #domain_BrowserInfo{
+        accept_header = AcceptHeader,
+        user_agent = UserAgent,
+        language = Language,
+        color_depth = ColorDepth,
+        screen_width = ScreenWidth,
+        screen_height = ScreenHeight,
+        tz_offset = TzOffset
+    }
+) ->
+    genlib_map:compact(#{
+        <<"browserAcceptHeader">> => AcceptHeader,
+        <<"browserUserAgent">> => UserAgent,
+        <<"browserLanguage">> => Language,
+        <<"browserColorDepth">> => ColorDepth,
+        <<"browserScreenWidth">> => ScreenWidth,
+        <<"browserScreenHeight">> => ScreenHeight,
+        <<"browserTZ">> => TzOffset
+    }).
+
+decode_device_info(undefined) ->
+    undefined;
+decode_device_info(
+    #domain_DeviceInfo{
+        device_type = DeviceType,
+        os_name = OsName,
+        os_version = OsVersion,
+        device_model = DeviceModel,
+        browser_name = BrowserName,
+        browser_version = BrowserVersion,
+        time_zone = TimeZone,
+        languages = Languages,
+        screen_pixel_ratio = ScreenPixelRatio,
+        web_view = WebView,
+        user_agent_brands = UserAgentBrands
+    }
+) ->
+    genlib_map:compact(#{
+        <<"deviceType">> => decode_device_type(DeviceType),
+        <<"osName">> => OsName,
+        <<"osVersion">> => OsVersion,
+        <<"deviceModel">> => DeviceModel,
+        <<"browserName">> => BrowserName,
+        <<"browserVersion">> => BrowserVersion,
+        <<"timeZone">> => TimeZone,
+        <<"languages">> => Languages,
+        <<"screenPixelRatio">> => ScreenPixelRatio,
+        <<"webView">> => WebView,
+        <<"userAgentBrands">> => decode_brands(UserAgentBrands)
+    }).
+
+decode_device_type(undefined) ->
+    undefined;
+decode_device_type({desktop, #domain_DeviceTypeDesktop{}}) ->
+    <<"desktop">>;
+decode_device_type({mobile, #domain_DeviceTypeMobile{}}) ->
+    <<"mobile">>;
+decode_device_type({tablet, #domain_DeviceTypeTablet{}}) ->
+    <<"tablet">>;
+decode_device_type({unknown, #domain_DeviceTypeUnknown{}}) ->
+    <<"unknown">>.
+
+decode_brands(undefined) ->
+    undefined;
+decode_brands(UserAgentBrands) ->
+    lists:map(
+        fun(Brand) -> decode_brand(Brand) end,
+        UserAgentBrands
+    ).
+
+decode_brand(
+    #domain_UserAgentBrand{
+        brand = Brand,
+        version = Version
+    }
+) ->
+    genlib_map:compact(#{
+        <<"brand">> => Brand,
+        <<"version">> => Version
+    }).
 
 -define(PAN_LENGTH, 16).
 

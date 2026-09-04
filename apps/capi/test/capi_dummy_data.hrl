@@ -98,3 +98,31 @@
         message_expiration = ?TIMESTAMP
     }}
 ).
+
+-define(BROWSER_INFO, #{
+    <<"browserAcceptHeader">> => <<"application/json">>,
+    <<"browserUserAgent">> => <<"chromium">>,
+    <<"browserLanguage">> => <<"ru-RU">>,
+    <<"browserColorDepth">> => <<"24">>,
+    <<"browserScreenWidth">> => <<"1080">>,
+    <<"browserScreenHeight">> => <<"1080">>,
+    <<"browserTZ">> => <<"-480">>
+}).
+
+-define(DEVICE_INFO, #{
+    <<"deviceType">> => <<"desktop">>,
+    <<"osName">> => <<"iOS">>,
+    <<"osVersion">> => <<"17.5.1">>,
+    <<"deviceModel">> => <<"iPhone">>,
+    <<"browserName">> => <<"Safari">>,
+    <<"browserVersion">> => <<"126">>,
+    <<"timeZone">> => <<"Asia/Dubai">>,
+    <<"languages">> => [<<"ru">>, <<"en">>],
+    <<"screenPixelRatio">> => 2,
+    <<"webView">> => true,
+    <<"userAgentBrands">> => [?USER_AGENT_BRAND(<<"Chrome">>), ?USER_AGENT_BRAND(<<"Firefox">>)]
+}).
+
+-define(USER_AGENT_BRAND(Name), #{
+    <<"brand">> => Name
+}).
