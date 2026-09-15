@@ -31,6 +31,7 @@
     create_payment_resource_unsupported_card_test/1,
     create_payment_resource_invalid_cardholder_test/1,
     create_visa_with_empty_cvc_ok_test/1,
+    create_visa_with_empty_string_cvc_ok_test/1,
     create_visa_with_wrong_cvc_test/1,
     create_visa_with_wrong_cardnumber_test/1,
     create_nspkmir_payment_resource_ok_test/1,
@@ -104,6 +105,7 @@ groups() ->
             create_payment_resource_unsupported_card_test,
             create_payment_resource_invalid_cardholder_test,
             create_visa_with_empty_cvc_ok_test,
+            create_visa_with_empty_string_cvc_ok_test,
             create_visa_with_wrong_cvc_test,
             create_visa_with_wrong_cardnumber_test,
             create_nspkmir_payment_resource_ok_test,
@@ -457,6 +459,47 @@ create_visa_with_empty_cvc_ok_test(Config) ->
     } = capi_utils:base64url_to_map(PaymentSession),
     ?assertEqual(?BROWSER_INFO, BrowserInfo),
     ?assertEqual(?DEVICE_INFO, DeviceInfo).
+
+-spec create_visa_with_empty_string_cvc_ok_test(_) -> _.
+create_visa_with_empty_string_cvc_ok_test(Config) ->
+    _ = capi_ct_helper:mock_services(
+        [
+            {cds_storage, fun
+                ('PutSession', {_, #cds_SessionData{auth_data = {card_security_code, AuthData}}}) ->
+                    ?assertEqual(<<>>, AuthData#cds_CardSecurityCode.value),
+                    {ok, ok};
+                ('PutCard', {#cds_PutCardData{pan = <<"411111", _:6/binary, Mask:4/binary>>}}) ->
+                    {ok, #cds_PutCardResult{
+                        bank_card = #cds_BankCard{
+                            token = ?STRING,
+                            bin = <<"411111">>,
+                            last_digits = Mask
+                        }
+                    }}
+            end},
+            {binbase, fun('Lookup', _) -> {ok, ?BINBASE_LOOKUP_RESULT(<<"VISA">>)} end}
+        ],
+        Config
+    ),
+    {ok, #{
+        <<"paymentToolToken">> := PaymentToolToken,
+        <<"paymentToolDetails">> := #{
+            <<"detailsType">> := <<"PaymentToolDetailsBankCard">>,
+            <<"paymentSystem">> := <<"VISA">>
+        },
+        <<"resourceToken">> := ?STRING
+    }} = capi_client_tokens:create_payment_resource(?config(context, Config), #{
+        <<"paymentTool">> => #{
+            <<"paymentToolType">> => <<"CardData">>,
+            <<"cardNumber">> => <<"4111111111111111">>,
+            <<"cardHolder">> => <<"Alexander Weinerschnitzel">>,
+            <<"expDate">> => <<"08/27">>,
+            <<"cvv">> => <<>>
+        },
+        <<"clientInfo">> => #{<<"fingerprint">> => <<"test fingerprint">>}
+    }),
+    {bank_card, BankCard} = decrypt_payment_tool(PaymentToolToken),
+    ?assertMatch(#domain_BankCard{is_cvv_empty = true}, BankCard).
 
 -spec create_visa_with_wrong_cvc_test(_) -> _.
 create_visa_with_wrong_cvc_test(Config) ->
