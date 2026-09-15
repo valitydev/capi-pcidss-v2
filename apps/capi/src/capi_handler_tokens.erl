@@ -207,7 +207,8 @@ make_payment_token_deadline(PaymentToolDeadline) ->
 
 %%
 
-process_card_data(Data, Context) ->
+process_card_data(Data0, Context) ->
+    Data = drop_empty_cvv(Data0),
     CardData = encode_card_data(Data),
     SessionData = encode_session_data(Data),
     BankInfo = get_bank_info(maps:get(pan, CardData), Context),
@@ -253,6 +254,11 @@ encode_exp_date({Month, Year}) ->
         year = Year,
         month = Month
     }.
+
+drop_empty_cvv(#{<<"cvv">> := <<>>} = CardData) ->
+    maps:remove(<<"cvv">>, CardData);
+drop_empty_cvv(CardData) ->
+    CardData.
 
 encode_session_data(CardData) ->
     #cds_SessionData{
@@ -759,3 +765,17 @@ validate_payment_service_ref(#domain_PaymentServiceRef{} = Ref) ->
         throw:#domain_conf_v2_ObjectNotFound{} ->
             {error, object_not_found}
     end.
+
+-ifdef(TEST).
+-include_lib("eunit/include/eunit.hrl").
+
+-spec test() -> _.
+
+-spec drop_empty_cvv_test() -> _.
+drop_empty_cvv_test() ->
+    Base = #{<<"cardNumber">> => <<"4111111111111111">>, <<"expDate">> => <<"08/27">>},
+    ?assertEqual(Base, drop_empty_cvv(Base#{<<"cvv">> => <<>>})),
+    ?assertEqual(Base#{<<"cvv">> => <<"123">>}, drop_empty_cvv(Base#{<<"cvv">> => <<"123">>})),
+    ?assertEqual(Base, drop_empty_cvv(Base)).
+
+-endif.
