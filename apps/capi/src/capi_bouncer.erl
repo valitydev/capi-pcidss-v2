@@ -1,6 +1,8 @@
 -module(capi_bouncer).
 
--export([gather_context_fragments/4]).
+-include_lib("bouncer_proto/include/bouncer_ctx_thrift.hrl").
+
+-export([gather_context_fragments/5]).
 -export([judge/2]).
 
 %%
@@ -8,13 +10,15 @@
 -spec gather_context_fragments(
     TokenContextFragment :: token_keeper_client:context_fragment(),
     UserID :: binary() | undefined,
+    PartyID :: binary() | undefined,
     RequestContext :: swag_server:request_context(),
     WoodyContext :: woody_context:ctx()
 ) -> capi_bouncer_context:fragments().
-gather_context_fragments(TokenContextFragment, UserID, ReqCtx, WoodyCtx) ->
+gather_context_fragments(TokenContextFragment, UserID, PartyID, ReqCtx, WoodyCtx) ->
     {Base, External0} = capi_bouncer_context:new(),
     External1 = External0#{<<"token-keeper">> => {encoded_fragment, TokenContextFragment}},
-    {add_requester_context(ReqCtx, Base), maybe_add_userorg(UserID, External1, WoodyCtx)}.
+    External2 = maybe_add_userorg(UserID, PartyID, External1, WoodyCtx),
+    {add_requester_context(ReqCtx, Base), External2}.
 
 -spec judge(capi_bouncer_context:fragments(), woody_context:ctx()) -> capi_auth:resolution().
 judge({Acc, External}, WoodyCtx) ->
@@ -25,9 +29,16 @@ judge({Acc, External}, WoodyCtx) ->
 
 %%
 
-maybe_add_userorg(undefined, External, _WoodyCtx) ->
+maybe_add_userorg(undefined, undefined, External, _WoodyCtx) ->
     External;
-maybe_add_userorg(UserID, External, WoodyCtx) ->
+maybe_add_userorg(undefined, PartyID, External, WoodyCtx) ->
+    case bouncer_context_helpers:get_party_org_fragment(PartyID, WoodyCtx) of
+        {ok, PartyOrgFragment} ->
+            External#{<<"partyorg">> => PartyOrgFragment};
+        {error, {party, notfound}} ->
+            External
+    end;
+maybe_add_userorg(UserID, _PartyID, External, WoodyCtx) ->
     case bouncer_context_helpers:get_user_orgs_fragment(UserID, WoodyCtx) of
         {ok, UserOrgsFragment} ->
             External#{<<"userorg">> => UserOrgsFragment};

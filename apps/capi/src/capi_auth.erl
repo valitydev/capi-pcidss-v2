@@ -95,6 +95,7 @@ authorize_operation(Prototypes, ProcessingContext) ->
     Fragments = capi_bouncer:gather_context_fragments(
         get_token_keeper_fragment(AuthContext),
         get_user_id(AuthContext),
+        get_party_id(AuthContext),
         SwagContext,
         WoodyContext
     ),
