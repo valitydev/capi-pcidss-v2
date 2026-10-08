@@ -11,7 +11,7 @@
   0},
  {<<"bouncer_client">>,
   {git,"https://github.com/valitydev/bouncer-client-erlang.git",
-       {ref,"4be789a030402f1038ced1b06154baedb72b5013"}},
+       {ref,"aaa226360958c1476a0d2e661d402c37478bec55"}},
   0},
  {<<"bouncer_proto">>,
   {git,"https://github.com/valitydev/bouncer-proto.git",
