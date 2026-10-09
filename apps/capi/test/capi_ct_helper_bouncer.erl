@@ -36,15 +36,26 @@ mock_client(SupOrConfig) ->
                 {
                     org_management,
                     {orgmgmt_authctx_provider_thrift, 'AuthContextProvider'},
-                    fun('GetUserContext', {UserID}) ->
-                        {encoded_fragment, Fragment} = bouncer_client:bake_context_fragment(
-                            bouncer_context_helpers:make_user_fragment(#{
-                                id => UserID,
-                                realm => #{id => ?TEST_USER_REALM},
-                                orgs => [#{id => ?STRING, owner => #{id => UserID}, party => #{id => UserID}}]
-                            })
-                        ),
-                        {ok, Fragment}
+                    fun
+                        ('GetUserContext', {UserID}) ->
+                            {encoded_fragment, Fragment} = bouncer_client:bake_context_fragment(
+                                bouncer_context_helpers:make_user_fragment(#{
+                                    id => UserID,
+                                    realm => #{id => ?TEST_USER_REALM},
+                                    orgs => [#{id => ?STRING, owner => #{id => UserID}, party => #{id => UserID}}]
+                                })
+                            ),
+                            {ok, Fragment};
+                        ('GetPartyContext', {PartyID}) ->
+                            {encoded_fragment, Fragment} = bouncer_client:bake_context_fragment(
+                                bouncer_context_helpers:make_party_fragment(#{
+                                    id => PartyID,
+                                    organization => #{
+                                        id => ?STRING, owner => #{id => ?STRING}, allowed_ips => [?STRING]
+                                    }
+                                })
+                            ),
+                            {ok, Fragment}
                     end
                 }
             ],
